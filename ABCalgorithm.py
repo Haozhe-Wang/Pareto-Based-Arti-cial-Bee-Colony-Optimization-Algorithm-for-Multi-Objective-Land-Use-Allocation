@@ -10,24 +10,7 @@ from implementation.readInformation import readInformation
 
 
 # ---- BEE CLASS
-def calculateVector(info,matrix):
-    """
-    :param info: information of each cell corresponding each objective
-    :param matrix: the solution matrix
-    :return:
-    """
-    vector = []
-    for row in range(len(matrix)):
-        for col in range(len(matrix[row])):
-            type = matrix[row][col]
-            value=info[type][row][col]
-            if vector == []:
-                vector=value
-                continue
-            else:
-                for i in range(len(value)):
-                    vector[i]+=value[i]
-    return vector
+
 class Bee(object):
     """ Creates a bee object. """
 
@@ -47,6 +30,8 @@ class Bee(object):
         self._matrix = matrix
         self._fitness = sys.float_info.max
         self._landType_thr = landType_thr
+        # self._pos_lookUp={}
+        # self.initPosLookUp()
         # initialises trial limit counter - i.e. abandonment counter
         self._counter = 0
         #todo add 0 type representing the cell will not be used
@@ -74,12 +59,35 @@ class Bee(object):
         #todo: this should be replaced by model function(得到各种类型在不同栅格的指标是多少）
         #必须返回 dict 类型 --> key：土地类型（例：森林） value：矩阵（每个栅格对应这个类型的各个指标）
         info = readInformation(list(self._landType_thr.keys()))
-        self._vector=calculateVector(info,self._matrix)
+        self._vector=self._calculateVector(info)
 
+    def _calculateVector(self,info):
+        """
+        :param info: information of each cell corresponding each objective
+        :param matrix: the solution matrix
+        :return:
+        """
+        vector = []
+        for row in range(len(self._matrix)):
+            for col in range(len(self._matrix[row])):
+                type = self._matrix[row][col]
+                value = info[type][row][col]
+                # self._pos_lookUp[type].append((row,col))
+                if vector == []:
+                    vector = value
+                    continue
+                else:
+                    for i in range(len(value)):
+                        vector[i] += value[i]
+        return vector
+    # def initPosLookUp(self):
+    #     for type in self._landType_thr.keys():
+    #         self._pos_lookUp[type]=[]
     def getVector(self):
         return self._vector
     def setMatrix(self,matrix):
         self._matrix=matrix
+        # self.initPosLookUp()
         self.calculateVector()
     def getMatrix(self):
         return self._matrix
@@ -118,7 +126,6 @@ class BeeHive(object):
     is equal to the number of onlooker bees.
 
     """
-
     def run(self):
         """ Runs an Artificial Bee Colony (ABC) algorithm. """
 
@@ -159,7 +166,6 @@ class BeeHive(object):
                  max_itrs     = 100   ,
                  max_trials   = None  ,
                  mutate_per   = 0.3   ,
-                 crossover_per  = 0.3 ,
                  selfun       = None  ,
                  verbose      = False ,
                  extra_params = None ,):
@@ -184,17 +190,16 @@ class BeeHive(object):
             :param int max_trials      : max number of trials without any improvment
             :param def selfun          : custom selection function
             :param float mutate_per    : percentage of cells will be exchanged in mutation phrase
-            :param float crossover_per : percentage of cells will be exchanged in crossover phrase
             :param boolean verbose     : makes computation verbose
             :param dict extra_params   : optional extra arguments for selection function selfun
 
         """
         self._paretoArchive = []
         self._row = row
+        self._random_maximum_times=10
         self._col = col
-        self._landType_thr = landType_thr
+        self._landType_thr = landType_thr #the min and max number of cells of each type can be allocated
         self._mutatePer=mutate_per
-        self._crossoverPer=crossover_per
         #todo need new function to determine dominance
 
         # computes the number of employees
@@ -426,8 +431,7 @@ class BeeHive(object):
             self.send_employee(index)
 
 
-    def _check(self, vector, dim=None):
-        #todo change the checking criteria to matrix
+    def _check(self, matrix):
         """
 
         Checks that a solution vector is contained within the
@@ -435,22 +439,104 @@ class BeeHive(object):
 
         """
 
-        if (dim == None):
-            range_ = range(self.dim)
-        else:
-            range_ = [dim]
+        valid = True
+        violates = {}
+        for r in range(self._row):
+            for c in range(self._col):
+                type =matrix[r][c]
+                if type in violates.keys():
+                    violates[type]+=1
+                else:
+                    violates[type]=0
+        for name,threshold in self._landType_thr.items():
+            if name not in violates:
+                violates[name]=0
+            low_thr = threshold[0]
+            num = violates[name]
+            if num - low_thr>=0:
+                high_thr = threshold[1]
+                # high_thr <0 means the number of the type has no upper threshold
+                if high_thr<0 or high_thr-num >= 0:
+                    del violates[name]
+                else:
+                    violates[name]= num - high_thr # the number of cells that exceed the upper threshold
+            else:
+                violates[name]=num-low_thr # the number of cells that less than the lower threshold
+        if len(violates)>0:
+            valid=False
+        return valid,violates
 
-        for i in range_:
+    def _adjust(self,matrix, violates):
+        # the adjust function may be changed as needed
+        pos_lookUp=self.posLookUp(matrix)
+        low_list = []
+        high_list=[]
+        normal_list = list(self._landType_thr.keys())
+        for type,diff in violates.items():
+            if diff > 0:
+                high_list.append(type)
+            else:
+                low_list.append(type)
+            normal_list.remove(type)
+        for low in low_list:
+            while violates[low]<0:
+                select_poss=[]
+                selected_type=""
+                while select_poss == []:
+                    if len(high_list)>0:
+                        index = random.randint(0,len(high_list)-1)
+                        selected_type = high_list[index]
+                    else:
+                        index = random.randint(0, len(normal_list) - 1)
+                        selected_type = normal_list[index]
+                    # random select a position for each type
+                    select_poss = pos_lookUp[selected_type]
+                    # make sure the selected type is able to decrease its amount
+                    if not len(select_poss)>self._landType_thr[selected_type][0]:
+                        select_poss=[]
 
-            # checks lower bound
-            if  (vector[i] < self.lower[i]):
-                vector[i] = self.lower[i]
+                select_index = random.randint(0, len(select_poss) - 1)
+                select_pos = select_poss[select_index]
 
-            # checks upper bound
-            elif (vector[i] > self.upper[i]):
-                vector[i] = self.upper[i]
+                # replace selected value
+                matrix[select_pos[0]][select_pos[1]]=low
+                pos_lookUp[low].append(select_pos)
+                pos_lookUp[selected_type].pop(select_index)
+                violates[low]+=1
+                # if selected type is the type needed to be reduced
+                if selected_type in high_list:
+                    violates[selected_type]-=1
+                    if not violates[selected_type]>0:
+                        high_list.remove(selected_type)
+                        normal_list.append(selected_type)
 
-        return vector
+            # del violates[low]
+            normal_list.append(low)
+
+        for high in high_list:
+            while violates[high]>0:
+                selected_type=""
+                while selected_type=="" or (not len(pos_lookUp[selected_type])<self._landType_thr[selected_type][1]):
+                    #random select a type to replace the high  type
+                    index = random.randint(0, len(normal_list) - 1)
+                    selected_type = normal_list[index]
+
+                # random select a position in high list positions
+                high_poss = pos_lookUp[high]
+                high_index = random.randint(0,len(high_poss)-1)
+                high_pos = high_poss[high_index]
+
+                #replace the position with another type
+                matrix[high_pos[0]][high_pos[1]] = selected_type
+                pos_lookUp[selected_type].append(high_pos)
+                pos_lookUp[high].pop(high_index)
+                violates[high] -= 1
+        return matrix
+    def adjustMatrix(self,matrix):
+        valid, violates = self._check(matrix)
+        if not valid:
+            matrix = self._adjust(matrix, violates)
+        return matrix
 
     def _verbose(self, itr, cost):
         """ Displays information about computation.
@@ -557,47 +643,108 @@ class BeeHive(object):
         return matrix
     def _mutateAndCrossover(self,bee,otherBee):
         newBee=self._mutate(bee)
-        ifDominated =self.ifDominated(bee,newBee)
-        if not ifDominated:
-            bee.incCounter()
         self._crossover(bee,otherBee)
 
+    def _randomGetCell(self):
+        row = random.randint(0, self._row - 1)
+        col = random.randint(0, self._col - 1)
+        return row, col
     def _mutate(self,bee):
-        def randomGetCell():
-            row = random.randint(0, self._row - 1)
-            col = random.randint(0, self._col-1)
-            return row,col
+        """
+
+        :param bee: the bee object with matrix to be mutated
+        :return: a bee object with new matrix
+        """
         num_cell = int(self._row * self._col*self._mutatePer)
         matrix = bee.matrix
         for i in range(num_cell):
             row1,row2,col1,col2=0,0,0,0
-            while 1:
-                row1,col1 = randomGetCell()
-                row2.col2 = randomGetCell()
+            # only iterate to maximum of 10 times, in case of extreme conditions making the program running infinitely
+            for i in range(self._random_maximum_times):
+                row1,col1 = self._randomGetCell()
+                row2.col2 = self._randomGetCell()
                 if not (row1==row2 and col1 == col2):
                     break
             matrix[row1][col1],matrix[row2][col2]=matrix[row2][col2],matrix[row1][col1]
         bee.matrix=matrix
         return bee
 
-
     def _crossover(self,bee,otherBee):
+        matrix = bee.matrix
+        otherMatrix = otherBee.matrix
+        landTypes = list(self._landType_thr.keys())
+        num_landTypes = len(landTypes)
+        RM = [[None]*num_landTypes for i in range(num_landTypes)]
+        for r in range(num_landTypes):
+            for c in range(num_landTypes):
+                if r!=c:
+                    RM[r][c]=random.randint(0,1)
+                else:
+                    RM[r][c] =0
+        pos_lookup={}
+        for i,landType in enumerate(landTypes):
+            pos_lookup[landType]=i
+        for r in range(self._row):
+            for c in range(self._col):
+                type1 = pos_lookup[matrix[r][c]]
+                type2 = pos_lookup[otherMatrix[r][c]]
+                ifChange = RM[type1][type2]
+                if ifChange == 1:
+                    matrix[r][c],otherMatrix[r][c]=otherMatrix[r][c],matrix[r][c]
         # checks boundaries
         # todo change here to check the value
-        bee.vector = self._check(bee.vector)
+
+        bee.matrix=self.adjustMatrix(matrix)
+        otherBee.matrix=self.adjustMatrix(otherMatrix)
+        return bee,otherBee
     def ifDominated(self,bee,otherBee):
         """
-        :return: boolean. True: bee is dominated by otherBee
+        todo may change the implementation of dominance juedgement
+        :return: boolean. True: bee is dominated by otherBee,
+                  boolean
         """
         vector = bee.vector
         otherVector= otherBee.vector
         haveGreater = False
+        canDecide = False
         for i in range(len(vector)):
             if vector[i]>otherVector[i]:
-                return False
+                return False,True
             if vector[i]<otherVector[i]:
                 haveGreater=True
-        return haveGreater
+                canDecide = True
+        return haveGreater,canDecide
+
+    def compromisingPrograming(self,bee,otherBee):
+        """
+        This is used to compare two bees using weighted sum
+        :return: the better bee is selected
+        """
+
+
+    def chooseBetterSolutionBee(self,bee,otherBee):
+        """
+        choose a bee to be retained from 2 input
+        :return: the better bee
+        """
+        #todo may change the implementation of this function along with ifDominated
+        ifDominated, canDecide = self.ifDominated(bee, otherBee)
+        if ifDominated:
+            return otherBee
+        if canDecide:
+            return bee
+
+            #     bee.incCounter()
+
+    def posLookUp(self,matrix):
+        pos_lookUp={}
+        for type in self._landType_thr:
+            pos_lookUp[type]=[]
+        for r in range(self._row):
+            for c in range(self._col):
+                type=matrix[r][c]
+                pos_lookUp[type].append((r,c))
+        return pos_lookUp
 
 
 
