@@ -3,7 +3,6 @@
 import random
 import sys
 import copy
-import operator
 import math
 from implementation.GenerateRandomData import printMatrix
 from implementation.readInformation import readInformation
@@ -27,6 +26,7 @@ class Bee(object):
 
         """
         self._vector = []
+        assert type(matrix)==list
         self._matrix = matrix
         self._fitness = sys.float_info.max
         self._landType_thr = landType_thr
@@ -86,6 +86,7 @@ class Bee(object):
     def getVector(self):
         return self._vector
     def setMatrix(self,matrix):
+        assert type(matrix) == list
         self._matrix=matrix
         # self.initPosLookUp()
         self.calculateVector()
@@ -134,6 +135,7 @@ class BeeHive(object):
             # employees phase
             for index in range(self.size):
                 self.send_employee(index)
+            self.trim(self.food_source,self._maxFS)
 
             # onlookers phase
             self.send_onlookers()
@@ -141,21 +143,12 @@ class BeeHive(object):
             # scouts phase
             self.send_scout()
 
-            # computes best path
-            self.find_best()
-
-            '''
-            # stores convergence information
-            cost["best"].append( self.best )
-            cost["mean"].append( sum( [ bee.value for bee in self.food_source ] ) / self.size )
-            '''
-
 
             # prints out information about computation
             if self.verbose:
-                self._verbose(itr, cost)
+                self._verbose(itr, self._paretoArchive)
 
-        return cost
+        return self._paretoArchive
 
     def __init__(self                 ,
                  row                  ,
@@ -165,6 +158,8 @@ class BeeHive(object):
                  landType_thr = None     ,
                  max_itrs     = 100   ,
                  max_trials   = None  ,
+                 max_PA       =  100 ,
+                 max_FS       =   20,
                  mutate_per   = 0.3   ,
                  selfun       = None  ,
                  verbose      = False ,
@@ -188,6 +183,8 @@ class BeeHive(object):
             :param int numb_bees       : number of active bees within the hive
             :param dict landType_thr   : threshold of each land type numbers
             :param int max_trials      : max number of trials without any improvment
+            :param int max_PA          : max capacity of pareto archive
+            :param int max_FS          : max capacity of food source
             :param def selfun          : custom selection function
             :param float mutate_per    : percentage of cells will be exchanged in mutation phrase
             :param boolean verbose     : makes computation verbose
@@ -198,6 +195,8 @@ class BeeHive(object):
         self._row = row
         self._random_maximum_times=10
         self._col = col
+        self._maxPA = max_PA
+        self._maxFS = max_FS
         self._landType_thr = landType_thr #the min and max number of cells of each type can be allocated
         self._mutatePer=mutate_per
         #todo need new function to determine dominance
@@ -228,35 +227,29 @@ class BeeHive(object):
         # self.evaluate = fun
         self._value_constrain    = value_constrain
 
-        '''
-        # initialises current best and its a solution vector
-        #TODO: may be replaced by new judgement corresponding to matrix
-        self.best = sys.float_info.max
-        #TODO: maybe replaced to solutions sets(food set)
-        self.solution = None
-        '''
-
         # creates a bee hive
         self.food_source = [ Bee(self.randomGeneration(),self._landType_thr) for i in range(self.size) ]
-        #
-        # # initialises best solution vector to food nectar
-        # self.find_best()
-        #
-        # # computes selection probability
-        # self.compute_probability()
-        #
-        # # verbosity of computation
-        # self.verbose = verbose
 
-    def find_best(self):
-        """ Finds current best bee candidate. """
-        #todo: this is useless, change the function to put all solutions in food source set
+    def trim(self,collection,maxNum):
+        result=[]
+        index=0
+        def getValue(arg):
+            return arg.fitness
+        while index<len(collection):
+            for k in range(len(collection)):
+                if index != k:
+                    ifIsDominated,canDecide = self.ifDominated(collection[index],collection[k])
+                    if ifIsDominated==True:
+                        collection.pop(index)
+                    else:
+                        result.append(collection[index])
+        if len(result)>maxNum:
+            for bee in result:
+                bee.fitness=self.fitness(bee,collection)
+            result=sorted(result,key=lambda arg: getValue(arg),reverse=True)
+            result=result[:maxNum]
+        return result
 
-        values = [ bee.value for bee in self.food_source ]
-        index  = values.index(min(values))
-        if (values[index] < self.best):
-            self.best     = values[index]
-            self.solution = self.food_source[index].vector
 
     def compute_probability(self):
         """
@@ -301,25 +294,9 @@ class BeeHive(object):
         # deepcopies current bee solution vector
         zombee = copy.deepcopy(self.food_source[index])
 
-        # selects another bee
-        bee_ix = index
-        while (bee_ix == index): bee_ix = random.randint(0, self.size-1)
-
         # produces a mutant based on current bee and bee's friend
-        self._mutateAndCrossover(zombee,copy.deepcopy(self.food_source[bee_ix]))
-
-        # computes fitness of mutant
-        # todo: change here for fitness invocation
-        zombee.value = self.evaluate(zombee.vector)
-        zombee._fitness()
-
-        # deterministic crowding
-        # todo have a local food set, use weighted sum to compare if necessary
-        if (zombee.fitness > self.food_source[index].fitness):
-            self.food_source[index] = copy.deepcopy(zombee)
-            self.food_source[index].counter = 0
-        else:
-            self.food_source[index].counter += 1
+        newSolutions = self.mutateAndCrossover(zombee,index)
+        self.food_source+=newSolutions
 
     def send_onlookers(self):
         """
@@ -337,8 +314,10 @@ class BeeHive(object):
 
         """
 
-        # sends onlookers
+        # evaluate fitness in food source
         numb_onlookers = 0; beta = 0
+        for bee in self.food_source:
+            bee.fitness=self.fitness(bee,self.food_source)
         while (numb_onlookers < self.size):
 
             # draws a random number from U[0,1]
@@ -547,25 +526,26 @@ class BeeHive(object):
         msg = "# Iter = {} | Best Evaluation Value = {} | Mean Evaluation Value = {} "
         print(msg.format(int(itr), cost["best"][itr], cost["mean"][itr]))
 
+    @staticmethod
+    def getVector(bee, index):
+        """
+        get the objective to be sorted
+        :param bee: the object contains the vector and matrix
+        :param index: the index to be sorted
+        """
+        return bee.vector[index]
     def fitness(self,target_bee,collection):
         """
         compute the fitness base on crowding distance
         :param list collection: can be pareto archive or food source(list of bee objects)
         """
 
-        def getVector(bee,index):
-            """
-            get the objective to be sorted
-            :param bee: the object contains the vector and matrix
-            :param index: the index to be sorted
-            :return:
-            """
-            return bee.vector[index]
+
         sum_distance = 0
         num_set = len(collection)
         for n in range(self.dim):
             # ascending sort
-            set = sorted(collection,key=lambda arg:getVector(arg,n))
+            set = sorted(collection,key=lambda arg:BeeHive.getVector(arg,n))
             target_i = set.index(target_bee)
             max_obj = set[-1]
             min_obj = set[0]
@@ -597,7 +577,7 @@ class BeeHive(object):
                 sum_distance+=dividend/divisor
             else:
                 sum_distance+=sys.float_info.max
-        target_bee.fitness=sum_distance
+
         return sum_distance
     def randomGeneration(self):
         """ Initialises a solution vector randomly. """
@@ -641,9 +621,16 @@ class BeeHive(object):
                         landTypes.pop(num)
         printMatrix(matrix)
         return matrix
+    def mutateAndCrossover(self,bee,index):
+        bee_ix = index
+        while (bee_ix == index): bee_ix = random.randint(0, self.size - 1)
+        return self._mutateAndCrossover(bee,copy.deepcopy(self.food_source[bee_ix]))
     def _mutateAndCrossover(self,bee,otherBee):
         newBee=self._mutate(bee)
-        self._crossover(bee,otherBee)
+        newBee = self.chooseBetterSolutionBee(bee,newBee)
+        newBee1,newBee2 =self._crossover(newBee,otherBee)
+        return [newBee1,newBee2]
+
 
     def _randomGetCell(self):
         row = random.randint(0, self._row - 1)
@@ -696,30 +683,60 @@ class BeeHive(object):
 
         bee.matrix=self.adjustMatrix(matrix)
         otherBee.matrix=self.adjustMatrix(otherMatrix)
-        return bee,otherBee
+        return [bee,otherBee]
     def ifDominated(self,bee,otherBee):
         """
         todo may change the implementation of dominance juedgement
         :return: boolean. True: bee is dominated by otherBee,
-                  boolean
+                  boolean  True: if we can decide which solution is better
         """
         vector = bee.vector
         otherVector= otherBee.vector
         haveGreater = False
-        canDecide = False
+        haveLess = False
         for i in range(len(vector)):
             if vector[i]>otherVector[i]:
-                return False,True
+                haveLess = True
             if vector[i]<otherVector[i]:
                 haveGreater=True
-                canDecide = True
-        return haveGreater,canDecide
+        if haveGreater and not haveLess:
+            return True,True
+        elif haveLess and not haveGreater:
+            return False,True
+        else:
+            # if all objective function returns equivalent value
+            # or if some objective function is better while others are not
+            return False,False
 
     def compromisingPrograming(self,bee,otherBee):
         """
         This is used to compare two bees using weighted sum
-        :return: the better bee is selected
+        the calculation see reference page 8
+        weight = (f(x) - f(min))/(f(max)-f(min))
+        :return: Bee the better bee is selected, if equal, select bee
         """
+        vector = bee.vector
+        otherVector= otherBee.vector
+        max_vectors = []
+        min_vectors = []
+        for n in range(self.dim):
+            set = sorted(self.food_source, key=lambda arg: BeeHive.getVector(arg, n))
+            min_vectors.append(set[0])
+            max_vectors.append(set[-1])
+        vector_weight = 0
+        otherVector_weight =0
+        for i in range(self.dim):
+            min = min_vectors[i]
+            max = max_vectors[i]
+            vector_weight+=(vector[i]-min)/(max-min)
+            otherVector_weight+=(otherVector - min)/(max-min)
+        if vector_weight>=otherVector_weight:
+            # inc counter?????????????????????????????????????
+            return bee
+        else:
+            return otherBee
+
+
 
 
     def chooseBetterSolutionBee(self,bee,otherBee):
@@ -731,8 +748,10 @@ class BeeHive(object):
         ifDominated, canDecide = self.ifDominated(bee, otherBee)
         if ifDominated:
             return otherBee
-        if canDecide:
+        elif not ifDominated and canDecide:
             return bee
+        else:
+            return self.compromisingPrograming(bee,otherBee)
 
             #     bee.incCounter()
 
