@@ -68,18 +68,15 @@ def run():
     ndim = int(2)
     value_constrain,landType_thr= readConstrain()
     print(landType_thr)
+
     model = ABCalgorithm.BeeHive(
                          10,  10,
                          value_constrain=value_constrain,
                          landType_thr=landType_thr,
                          numb_bees =  10       ,
-                         max_itrs  =  50       ,)
-
-    # runs model
-    cost = model.run()
-
-    # prints out best solution
-    print("Fitness Value ABC: {0}".format(model.best))
+                         max_itrs  =  50       ,
+                         verbose=True)
+    model.run()
 
 
 if __name__ == "__main__":

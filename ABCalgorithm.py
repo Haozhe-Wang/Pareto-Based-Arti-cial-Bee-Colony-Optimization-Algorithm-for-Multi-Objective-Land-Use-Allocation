@@ -4,7 +4,9 @@ import random
 import sys
 import copy
 import math
-from implementation.GenerateRandomData import printMatrix
+import numpy
+import logging
+from implementation.GenerateRandomData import printMatrix,getMatrix
 from implementation.readInformation import readInformation
 
 
@@ -101,6 +103,11 @@ class Bee(object):
         return self._counter
     def incCounter(self,counter):
         self._counter+=1
+    def __str__(self):
+        output=""
+        output+=getMatrix(self.matrix)
+        output+="\n%s"%self._vector
+        return output
     fitness= property(getFitness,setFitness)
     vector=property(getVector)
     matrix = property(getMatrix,setMatrix)
@@ -132,6 +139,12 @@ class BeeHive(object):
 
         for itr in range(self.max_itrs):
 
+            logging.basicConfig(level=logging.INFO,
+                                format='%(asctime)s %(filename)s[line:%(lineno)d] %(levelname)s %(message)s',
+                                datefmt='%a, %d %b %Y %H:%M:%S')
+            logging.info("print")
+            # creates a bee hive
+            self.food_source = [Bee(self.randomGeneration(), self._landType_thr) for i in range(self.size)]
             # employees phase
             for index in range(self.size):
                 self.send_employee(index)
@@ -143,10 +156,12 @@ class BeeHive(object):
             # scouts phase
             self.send_scout()
 
+            self._paretoArchive+=self.food_source
+            self.trim(self._paretoArchive,self._maxPA)
 
             # prints out information about computation
             if self.verbose:
-                self._verbose(itr, self._paretoArchive)
+                self._verbose(itr)
 
         return self._paretoArchive
 
@@ -199,6 +214,7 @@ class BeeHive(object):
         self._maxFS = max_FS
         self._landType_thr = landType_thr #the min and max number of cells of each type can be allocated
         self._mutatePer=mutate_per
+        self.verbose = verbose
         #todo need new function to determine dominance
 
         # computes the number of employees
@@ -227,22 +243,24 @@ class BeeHive(object):
         # self.evaluate = fun
         self._value_constrain    = value_constrain
 
-        # creates a bee hive
-        self.food_source = [ Bee(self.randomGeneration(),self._landType_thr) for i in range(self.size) ]
-
     def trim(self,collection,maxNum):
         result=[]
         index=0
         def getValue(arg):
             return arg.fitness
         while index<len(collection):
+            ifAppend = True
             for k in range(len(collection)):
                 if index != k:
                     ifIsDominated,canDecide = self.ifDominated(collection[index],collection[k])
                     if ifIsDominated==True:
                         collection.pop(index)
-                    else:
-                        result.append(collection[index])
+                        index-=1
+                        ifAppend=False
+                        break
+            if ifAppend:
+                result.append(collection[index])
+            index+=1
         if len(result)>maxNum:
             for bee in result:
                 bee.fitness=self.fitness(bee,collection)
@@ -259,37 +277,18 @@ class BeeHive(object):
         employed bees are back within the hive.
 
         """
-
-        # retrieves fitness of bees within the hive
-        #todo change here to call bee _fitness function
-        values = [bee.fitness for bee in self.food_source]
-        max_values = max(values)
-
-        # computes probalities the way Karaboga does in his classic ABC implementation
-        if (self.selfun == None):
-            self.probas = [0.9 * v / max_values + 0.1 for v in values]
-        else:
-            if (self.extra_params != None):
-                self.probas = self.selfun(list(values), **self.extra_params)
-            else:
-                self.probas = self.selfun(values)
-
-        # returns intervals of probabilities
-        return [sum(self.probas[:i+1]) for i in range(self.size)]
+        total = 0
+        probabilities=[]
+        for bee in self.food_source:
+            temp=self.fitness(bee,self.food_source)
+            bee.fitness=temp
+            total+=temp
+        for bee in self.food_source:
+            probability = bee.fitness/total
+            probabilities.append((probability,bee))
+        return probabilities
 
     def send_employee(self, index):
-        """
-
-        2. SEND EMPLOYED BEES PHASE.
-        ---------------------------
-
-        During this 2nd phase, new candidate solutions are produced for
-        each employed bee by cross-over and mutation of the employees.
-
-        If the modified vector of the mutant bee solution is better than
-        that of the original bee, the new vector is assigned to the bee.
-
-        """
 
         # deepcopies current bee solution vector
         zombee = copy.deepcopy(self.food_source[index])
@@ -299,115 +298,65 @@ class BeeHive(object):
         self.food_source+=newSolutions
 
     def send_onlookers(self):
-        """
-
-        3. SEND ONLOOKERS PHASE.
-        -----------------------
-
-        We define as many onlooker bees as there are employed bees in
-        the hive since onlooker bees will attempt to locally improve the
-        solution path of the employed bee they have decided to follow
-        after the waggle dance phase.
-
-        If they improve it, they will communicate their findings to the bee
-        they initially watched "waggle dancing".
-
-        """
-
         # evaluate fitness in food source
         numb_onlookers = 0; beta = 0
         for bee in self.food_source:
             bee.fitness=self.fitness(bee,self.food_source)
         while (numb_onlookers < self.size):
 
-            # draws a random number from U[0,1]
-            phi = random.random()
-
-            # increments roulette wheel parameter beta
-            beta += phi * max(self.probas)
-            beta %= max(self.probas)
-
             # selects a new onlooker based on waggle dance
-            index = self.select(beta)
+            #Use roulette wheel strategy
+            index = self.select()
 
             # sends new onlooker
             self.send_employee(index)
+            self.trim(self.food_source,self._maxFS)
 
             # increments number of onlookers
             numb_onlookers += 1
 
-    def select(self, beta):
-        """
+    def select(self):
 
-        4. WAGGLE DANCE PHASE.
-        ---------------------
-
-        During this 4th phase, onlooker bees are recruited using a roulette
-        wheel selection.
-
-        This phase represents the "waggle dance" of honey bees (i.e. figure-
-        eight dance). By performing this dance, successful foragers
-        (i.e. "employed" bees) can share, with other members of the
-        colony, information about the direction and distance to patches of
-        flowers yielding nectar and pollen, to water sources, or to new
-        nest-site locations.
-
-        During the recruitment, the bee colony is re-sampled in order to mostly
-        keep, within the hive, the solution vector of employed bees that have a
-        good fitness as well as a small number of bees with lower fitnesses to
-        enforce diversity.
-
-        Parameter(s):
-        ------------
-            :param float beta : "roulette wheel selection" parameter - i.e. 0 <= beta <= max(probas)
-
-        """
 
         # computes probability intervals "online" - i.e. re-computed after each onlooker
         probas = self.compute_probability()
-
-        # selects a new potential "onlooker" bee
-        for index in range(self.size):
-            if (beta < probas[index]):
+        beta = random.random()
+        accumulator = 0
+        for index,proba in enumerate(probas):
+            if numpy.isnan(proba[0]):
+                accumulator+=0
+            else:
+                accumulator+=proba[0]
+            if (beta < accumulator):
+                assert self.food_source[index] == proba[1]
                 return index
+        return 0
 
     def send_scout(self):
         """
-
-        5. SEND SCOUT BEE PHASE.
-        -----------------------
-
         Identifies bees whose abandonment counts exceed preset trials limit,
         abandons it and creates a new random bee to explore new random area
         of the domain space.
 
-        In real life, after the depletion of a food nectar source, a bee moves
-        on to other food sources.
-
-        By this means, the employed bee which cannot improve their solution
-        until the abandonment counter reaches the limit of trials becomes a
-        scout bee. Therefore, scout bees in ABC algorithm prevent stagnation
-        of employed bee food_source.
-
-        Intuitively, this method provides an easy means to overcome any local
-        optima within which a bee may have been trapped.
-
         """
 
         # retrieves the number of trials for all bees
-        trials = [ self.food_source[i].counter for i in range(self.size) ]
+        trials = [ (self.food_source[i].counter,i) for i in range(len(self.food_source)) ]
+        trials.sort(reverse=True)
 
-        # identifies the bee with the greatest number of trials
-        index = trials.index(max(trials))
+        for trial in trials:
+            # checks if its number of trials exceeds the pre-set maximum number of trials
+            if (trial[0] > self.max_trials):
 
-        # checks if its number of trials exceeds the pre-set maximum number of trials
-        if (trials[index] > self.max_trials):
+                index = trial[1]
+                # creates a new scout bee randomly
+                self.food_source[index] = Bee(self.randomGeneration(),self._landType_thr)
 
-            # creates a new scout bee randomly
-            self.food_source[index] = Bee(self.lower, self.upper, self.evaluate)
-
-            # sends scout bee to exploit its solution vector
-            self.send_employee(index)
+                # sends scout bee to exploit its solution vector
+                self.send_employee(index)
+            else:
+                break
+        self.trim(self.food_source,self._maxFS)
 
 
     def _check(self, matrix):
@@ -491,15 +440,16 @@ class BeeHive(object):
 
             # del violates[low]
             normal_list.append(low)
-
+        logging.info(4)
         for high in high_list:
             while violates[high]>0:
                 selected_type=""
-                while selected_type=="" or (not len(pos_lookUp[selected_type])<self._landType_thr[selected_type][1]):
+                while selected_type=="" or (self._landType_thr[selected_type][1] != -1 and
+                    (not len(pos_lookUp[selected_type])<self._landType_thr[selected_type][1])):
                     #random select a type to replace the high  type
                     index = random.randint(0, len(normal_list) - 1)
                     selected_type = normal_list[index]
-
+                    print(selected_type,index,len(pos_lookUp[selected_type]),self._landType_thr[selected_type][1])
                 # random select a position in high list positions
                 high_poss = pos_lookUp[high]
                 high_index = random.randint(0,len(high_poss)-1)
@@ -510,21 +460,23 @@ class BeeHive(object):
                 pos_lookUp[selected_type].append(high_pos)
                 pos_lookUp[high].pop(high_index)
                 violates[high] -= 1
+
         return matrix
     def adjustMatrix(self,matrix):
         valid, violates = self._check(matrix)
+        logging.info(2)
         if not valid:
+            logging.info(3)
             matrix = self._adjust(matrix, violates)
         return matrix
 
-    def _verbose(self, itr, cost):
-        """ Displays information about computation.
-         todo change the way printing the information
-         """
-
-
-        msg = "# Iter = {} | Best Evaluation Value = {} | Mean Evaluation Value = {} "
-        print(msg.format(int(itr), cost["best"][itr], cost["mean"][itr]))
+    def _verbose(self, itr):
+        print("*"*100)
+        print("*"*100)
+        print("******* iteration: %s  *******"%itr)
+        for bee in self._paretoArchive:
+            print(bee)
+            print("\n"+"-"*100+"\n")
 
     @staticmethod
     def getVector(bee, index):
@@ -573,7 +525,7 @@ class BeeHive(object):
                 neighbor_high = set[target_i+1].vector[n]
 
                 dividend = math.fabs(neighbor_high-neighbor_less)
-                divisor = max_obj[n]-min_obj[n]
+                divisor = max_obj.vector[n]-min_obj.vector[n]
                 sum_distance+=dividend/divisor
             else:
                 sum_distance+=sys.float_info.max
@@ -623,12 +575,18 @@ class BeeHive(object):
         return matrix
     def mutateAndCrossover(self,bee,index):
         bee_ix = index
-        while (bee_ix == index): bee_ix = random.randint(0, self.size - 1)
-        return self._mutateAndCrossover(bee,copy.deepcopy(self.food_source[bee_ix]))
+        if len(self.food_source) == 1:
+            return [self._mutate(copy.deepcopy(bee))]
+        while (bee_ix == index):
+            bee_ix = random.randint(0, len(self.food_source)-1)
+        return self._mutateAndCrossover(copy.deepcopy(bee),copy.deepcopy(self.food_source[bee_ix]))
     def _mutateAndCrossover(self,bee,otherBee):
         newBee=self._mutate(bee)
+        logging.info(-1)
         newBee = self.chooseBetterSolutionBee(bee,newBee)
+        logging.info(0)
         newBee1,newBee2 =self._crossover(newBee,otherBee)
+        logging.info("print2")
         return [newBee1,newBee2]
 
 
@@ -649,7 +607,7 @@ class BeeHive(object):
             # only iterate to maximum of 10 times, in case of extreme conditions making the program running infinitely
             for i in range(self._random_maximum_times):
                 row1,col1 = self._randomGetCell()
-                row2.col2 = self._randomGetCell()
+                row2,col2 = self._randomGetCell()
                 if not (row1==row2 and col1 == col2):
                     break
             matrix[row1][col1],matrix[row2][col2]=matrix[row2][col2],matrix[row1][col1]
@@ -678,9 +636,7 @@ class BeeHive(object):
                 ifChange = RM[type1][type2]
                 if ifChange == 1:
                     matrix[r][c],otherMatrix[r][c]=otherMatrix[r][c],matrix[r][c]
-        # checks boundaries
-        # todo change here to check the value
-
+        logging.info(1)
         bee.matrix=self.adjustMatrix(matrix)
         otherBee.matrix=self.adjustMatrix(otherMatrix)
         return [bee,otherBee]
@@ -721,15 +677,15 @@ class BeeHive(object):
         min_vectors = []
         for n in range(self.dim):
             set = sorted(self.food_source, key=lambda arg: BeeHive.getVector(arg, n))
-            min_vectors.append(set[0])
-            max_vectors.append(set[-1])
+            min_vectors.append(set[0].vector[n])
+            max_vectors.append(set[-1].vector[n])
         vector_weight = 0
         otherVector_weight =0
         for i in range(self.dim):
             min = min_vectors[i]
             max = max_vectors[i]
             vector_weight+=(vector[i]-min)/(max-min)
-            otherVector_weight+=(otherVector - min)/(max-min)
+            otherVector_weight+=(otherVector[i] - min)/(max-min)
         if vector_weight>=otherVector_weight:
             # inc counter?????????????????????????????????????
             return bee

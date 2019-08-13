@@ -13,7 +13,18 @@ with open("data.txt",'w',encoding="UTF-8") as f:
             f.write("\n")
 
 def printMatrix(matrix):
+    output=""
     for r in matrix:
         for k in r:
             print(k,end=" ")
+            output+=k+" "
         print('\n')
+        output+='\n'
+    return output
+def getMatrix(matrix):
+    output=""
+    for r in matrix:
+        for k in r:
+            output+=k+" "
+        output+='\n'
+    return output
