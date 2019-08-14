@@ -47,7 +47,13 @@ def readConstrain():
                         raise ReadConstrainError(msg)
                 elif read_type ==1:
                     try:
-                        value_constrain[name]=[float(low),float(high)]
+                        landType,constrainName = name.split("-")
+                        if landType in value_constrain:
+                            temp = value_constrain[landType]
+                        else:
+                            temp={}
+                        temp[constrainName]=[float(low),float(high)]
+                        value_constrain[landType]=temp
                     except Exception as e:
 
                         msg = "Error Found When Reading Data Constrains: %s\n"%e
@@ -70,10 +76,10 @@ def run():
     print(landType_thr)
 
     model = ABCalgorithm.BeeHive(
-                         10,  10,
+                         10,  10,2,
                          value_constrain=value_constrain,
                          landType_thr=landType_thr,
-                         numb_bees =  1000       ,
+                         numb_bees =  100       ,
                          max_itrs  =  50       ,
                          verbose=True)
     archive = model.run()

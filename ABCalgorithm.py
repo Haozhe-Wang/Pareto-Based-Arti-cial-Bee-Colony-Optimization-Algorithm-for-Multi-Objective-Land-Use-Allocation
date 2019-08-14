@@ -168,6 +168,7 @@ class BeeHive(object):
     def __init__(self                 ,
                  row                  ,
                  col                  ,
+                 dim                  ,
                  value_constrain       ,
                  numb_bees    =  30   ,
                  landType_thr = None     ,
@@ -194,6 +195,7 @@ class BeeHive(object):
         ----------
             :param int row             : number of rows of the solution
             :param int col             : number of columns of the solution
+            :param int dim             : number of dimension of the solution
             :param dict value_constrain: constrain of solution vector for each value
             :param int numb_bees       : number of active bees within the hive
             :param dict landType_thr   : threshold of each land type numbers
@@ -222,7 +224,7 @@ class BeeHive(object):
 
         # assigns properties of algorithm
         # dimension
-        self.dim = len(value_constrain)
+        self.dim = dim
         self.max_itrs = max_itrs
 
         #TODO this can be changed
