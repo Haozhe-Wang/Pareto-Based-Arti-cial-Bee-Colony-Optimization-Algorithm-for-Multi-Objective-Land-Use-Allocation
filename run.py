@@ -5,7 +5,7 @@ try:
 except:
     raise ImportError("Numpy module not installed.")
 
-from implementation import ABCalgorithm
+from implementation import ABCalgorithm,exhibit
 
 
 
@@ -73,10 +73,20 @@ def run():
                          10,  10,
                          value_constrain=value_constrain,
                          landType_thr=landType_thr,
-                         numb_bees =  10       ,
+                         numb_bees =  1000       ,
                          max_itrs  =  50       ,
                          verbose=True)
-    model.run()
+    archive = model.run()
+    dataSet=[]
+    for bee in archive:
+        if len(dataSet)==0:
+            for v in bee.vector:
+                dataSet.append([v])
+        else:
+            for i,v in enumerate(bee.vector):
+                dataSet[i].append(v)
+    exhibit.show(dataSet)
+
 
 
 if __name__ == "__main__":

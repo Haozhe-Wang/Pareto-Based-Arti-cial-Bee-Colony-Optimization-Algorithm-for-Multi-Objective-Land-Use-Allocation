@@ -1,6 +1,6 @@
 value constrain
-水源涵养 1 10
-氮净化 5 20
+湿地-水源涵养 1 10
+湿地-氮净化 5 20
 land type constrain
 湿地 10 50
 森林 20 40

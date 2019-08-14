@@ -684,8 +684,9 @@ class BeeHive(object):
         for i in range(self.dim):
             min = min_vectors[i]
             max = max_vectors[i]
-            vector_weight+=(vector[i]-min)/(max-min)
-            otherVector_weight+=(otherVector[i] - min)/(max-min)
+            if (max-min) != 0:
+                vector_weight+=(vector[i]-min)/(max-min)
+                otherVector_weight+=(otherVector[i] - min)/(max-min)
         if vector_weight>=otherVector_weight:
             # inc counter?????????????????????????????????????
             return bee
