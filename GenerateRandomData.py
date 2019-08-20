@@ -24,7 +24,7 @@ def printMatrix(matrix):
     for r in matrix:
         for k in r:
             print(k,end=" ")
-            output+=k+" "
+            output+="%s "%k
         print('\n')
         output+='\n'
     return output
@@ -92,47 +92,17 @@ class generator1():
                     result_row.append(data_dict)
             self._result.append(result_row)
     def completeGraph(self):
+        ignoreIndex=[] # used later: if certain value couldn't found, ignore this
         for row in range(self._row):
             for col in range(self._col):
                 data_dict = self._result[row][col]
                 for name,datas in data_dict.items():
                     for index,data in enumerate(datas):
-                        if type(data)==int:
-                            self.search(row,col,name,index)
+                        if type(data)==int and index not in ignoreIndex:
+                            ifNeedIgnore=self.search(row,col,name,index)
+                            if ifNeedIgnore:
+                                ignoreIndex.append(index)
                 print(self._result[row][col])
-    '''
-    # def search(self,row,col,name,index,curr_min_distance=0,found_distance=sys.float_info.max):
-    #     weight = self._weights[row][col]
-    #     weight = sorted(weight.items(), key=lambda arg: arg[1] if arg[1] != None else sys.float_info.max)
-    #     # curr_min_distance+=weight[0][1]
-    #     found_value=0
-    #     # if curr_min_distance>=found_distance:
-    #     #     return (found_distance,0)
-    #     waiting_list=[]
-    #     for pos in weight:
-    #         if pos[1] != None:
-    #             direction = generator1.TEMPLATE[pos[0]]
-    #             newX = row + direction[0]
-    #             newY = col + direction[1]
-    #             distance = curr_min_distance+pos[1]
-    #             if distance<found_distance:
-    #                 value = self._result[newX][newY][name][index]
-    #                 if type(value)!=int:
-    #                     found_distance=distance
-    #                     found_value=value
-    #                     break
-    #                 else:
-    #                     waiting_list.append((newX,newY))
-    #     if waiting_list==[] or curr_min_distance+weight[0][1]>=found_distance:
-    #         return (found_distance, found_value)
-    #     new_result=[]
-    #     for new_cell in waiting_list:
-    #         new_result.append(self.search(new_cell[0],new_cell[1],name,index,curr_min_distance+weight[0][1],found_distance))
-    #     new_result=sorted(new_result)
-    #     if len(new_result)>0 and new_result[0][0]<found_distance:
-    #         return (new_result[0],new_result[1])
-    #     return (found_distance,0)
-    '''
     def search(self,row,col,name,index):
         # stack=[(row,col)]
         queue = PriorityQueue()
@@ -140,7 +110,7 @@ class generator1():
         foot_print={(row,col)}
         # min_distance_stack=[0]
         found_distance = sys.float_info.max
-        found_value=0
+        found_value=None
         # while len(stack)>0:
         while queue.length()>0:
             # next_pos=stack.pop()
@@ -171,12 +141,10 @@ class generator1():
                                     foot_print.add((newX,newY))
                         else:
                             break
-            # min_distance_stack.append(curr_min_distance+weight[0][1])
-        # for pos in foot_print:
-        #     self._result[pos[0]][pos[1]][name][index]=found_value
+        if found_value == None:
+            return True
         self._result[row][col][name][index] = found_value
-        # for i in sorted(foot_print):
-        #     print(i)
+        return False
 
 
 
@@ -189,6 +157,27 @@ class generator1():
     def getIndexFromLandType(num):
         # if change land type number, please change here!!!!
         return num-11
+
+    @staticmethod
+    def getLandTypeFromIndex(index):
+        # if change land type number, please change here!!!!
+        return index + 11
+
+    def writeToFile(self,fileName,numIndex):
+        with open(fileName, "w", encoding="UTF-8") as f:
+            for index in range(numIndex):
+                landType_num=generator1.getLandTypeFromIndex(index)
+                f.write("%s\n"%(self._typeMaps[landType_num]))
+                for row in self._result:
+                    row_write = ""
+                    for col in row:
+                        cell = ""
+                        for list in col.values():
+                            cell+="%s,"%list[index]
+                        row_write+="%s "%cell.strip(",")
+                    f.write(row_write)
+                    f.write("\n")
+
 class priorityItem():
     def __init__(self,item,priority):
         self._item=item
@@ -304,6 +293,7 @@ if __name__ == "__main__":
                "氮净化":"realData\part(1)\DanJingHua1.tif",
                "水源涵养":'realData\part(1)\ShuiYuanHanYang1.tif'}
     typeMaps = {11:"森林",12:'草地',13:'农田',14:'聚落',15:'湿地',16:'荒漠'}
+    '''
     # g.readData()
     # result = g.getResult()
     # nums=[0]*6
@@ -313,7 +303,7 @@ if __name__ == "__main__":
     #         for i,k in enumerate(temp):
     #             if type(k)!=int:
     #               nums[i]+=1
-    # print(nums)
+    # print(nums)'''
     '''
     q=PriorityQueue()
     a1=priorityItem(1,4)
@@ -333,27 +323,19 @@ if __name__ == "__main__":
     g = generator1(fileMaps, typeMaps,a.getWeights(), 144, 144)
     g.readData()
     temp_result = g.result
-    with open("orinaldata/originalData3.txt","w",encoding="UTF-8") as f:
+    '''with open("orinaldata/originalData3.txt","w",encoding="UTF-8") as f:
 
         for c in temp_result:
             for b in c:
                 f.write("%s"%b["氮净化"][2]+"\t")
-            f.write("\n")
+            f.write("\n")'''
 
     g.completeGraph()
 
-    # results = g.getResult()
+    results = g.getResult()
+    g.writeToFile("data2.txt",6)
 
-    # with open("data2.txt","w",encoding="UTF-8") as f:
-    #     for row in results:
-    #         for col in row:
-    #             col_v=""
-    #             for i in range(6):
-    #                 v = ""
-    #                 for name,values in col.items():
-    #                     v+="%s,"%values[i]
-    #                 v=v[0:-1]
-    #                 col_v+=v+" "
-    #             f.write(col_v+"\n")
+
+
 
 

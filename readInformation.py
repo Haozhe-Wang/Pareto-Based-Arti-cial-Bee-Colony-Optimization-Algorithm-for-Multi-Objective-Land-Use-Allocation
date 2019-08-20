@@ -1,7 +1,7 @@
 def readInformation(types):
 
     infos={}
-    with open("data.txt","r",encoding="UTF-8") as f:
+    with open("data2.txt","r",encoding="UTF-8") as f:
         datas = []
         cur_type = f.readline().strip()
         for line in f:
