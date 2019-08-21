@@ -20,7 +20,7 @@ def readInformation(types):
         infos[cur_type] = datas
     return infos
 if __name__ == "__main__":
-    from implementation.GenerateRandomData import printMatrix
+    from GenerateRandomData import printMatrix
     infos=readInformation(["湿地","森林","群落"])
     for key,matrix in infos.items():
         print(key)

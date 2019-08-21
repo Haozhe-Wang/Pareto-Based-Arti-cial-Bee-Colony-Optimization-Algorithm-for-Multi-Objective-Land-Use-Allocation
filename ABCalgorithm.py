@@ -6,8 +6,8 @@ import copy
 import math
 import numpy
 import logging
-from implementation.GenerateRandomData import printMatrix,getMatrix
-from implementation.readInformation import readInformation
+from GenerateRandomData import printMatrix,getMatrix
+from readInformation import readInformation
 
 
 # ---- BEE CLASS

@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 import math
+from readTIFgraph import Reader
 try:
     import numpy as np
 except:
     raise ImportError("Numpy module not installed.")
 
-from implementation import ABCalgorithm,exhibit
+import ABCalgorithm,exhibit
 
 
 
@@ -67,7 +68,7 @@ def constraintCheck(matrix):
     #todo add constrain check
     pass
 def readUnchangeArea(path,values):
-    from implementation.readTIFgraph import Reader
+
     reader = Reader(path)
     graph = reader.getFile()
     result = {}

@@ -1,6 +1,6 @@
 # import numpy as np
-from implementation.readTIFgraph import Reader
-from implementation.generateWeight import WeightsCreater
+from readTIFgraph import Reader
+from generateWeight import WeightsCreater
 import sys
 # sys.setrecursionlimit(100000)
 
