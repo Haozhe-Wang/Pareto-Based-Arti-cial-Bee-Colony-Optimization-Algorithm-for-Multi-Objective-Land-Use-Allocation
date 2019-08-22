@@ -441,6 +441,8 @@ class ABCProcess(Process):
         model = BeeHive(*self._args)
         archive = model.run()
         model.writeToFile(self._outputPath)
+        self._show(archive)
+    def _show(self,archive):
         dataSet = []
         for bee in archive:
             if len(dataSet) == 0:
@@ -449,7 +451,12 @@ class ABCProcess(Process):
             else:
                 for i, v in enumerate(bee.vector):
                     dataSet[i].append(v)
-        exhibit.show(dataSet)
+        if len(dataSet) > 2:
+            for i in range(len(dataSet)):
+                for k in range(i + 1, len(dataSet)):
+                    exhibit.show([dataSet[i], dataSet[k]])
+        else:
+            exhibit.show(dataSet)
 
 class CheckProcess(Thread):
     def __init__(self,path,landTypeMap,interface):
