@@ -6,6 +6,7 @@ import copy
 import math
 import numpy
 import logging
+import os
 from GenerateRandomData import printMatrix,getMatrix
 from readInformation import readInformation
 
@@ -15,7 +16,7 @@ from readInformation import readInformation
 class Bee(object):
     """ Creates a bee object. """
 
-    def __init__(self, matrix, landType_thr):
+    def __init__(self, matrix, landType_thr,readFile):
         """
 
         Instantiates a bee object randomly.
@@ -27,6 +28,7 @@ class Bee(object):
 
         """
         self._vector = []
+        self._readFile=readFile
         assert type(matrix)==list
         self._matrix = matrix
         self._fitness = sys.float_info.max
@@ -44,7 +46,7 @@ class Bee(object):
         #todo: this should be replaced by model function(得到各种类型在不同栅格的指标是多少）
         #必须返回 dict 类型 --> key：土地类型（例：森林） value：矩阵（每个栅格对应这个类型的各个指标）
         types = ["森林","草地","农田","聚落","湿地","荒漠"]
-        info = readInformation(types)
+        info = readInformation(self._readFile,types)
         self._vector=self._calculateVector(info)
 
     def _calculateVector(self,info):
@@ -125,7 +127,7 @@ class BeeHive(object):
                                 datefmt='%a, %d %b %Y %H:%M:%S')
             logging.info("print")
             # creates a bee hive
-            self.food_source = [Bee(self.randomGeneration(), self._landType_thr) for i in range(self.size)]
+            self.food_source = [Bee(self.randomGeneration(), self._landType_thr,self._readFile) for i in range(self.size)]
             # employees phase
             for index in range(self.size):
                 self.send_employee(index)
@@ -150,6 +152,7 @@ class BeeHive(object):
                  row                  ,
                  col                  ,
                  dim                  ,
+                 readFile             ,
                  occupied=        None,
                  numb_bees    =  30   ,
                  landType_thr = None ,
@@ -175,6 +178,7 @@ class BeeHive(object):
             :param int row             : number of rows of the solution
             :param int col             : number of columns of the solution
             :param int dim             : number of dimension of the solution
+            :param str readFile        : the file path that is used for data
             :param dict occupied       : including the cells that shouldn't be changed
             :param int numb_bees       : number of active bees within the hive
             :param dict landType_thr   : threshold of each land type numbers
@@ -187,7 +191,10 @@ class BeeHive(object):
         """
         self._paretoArchive = []
         self._row = row
+        self._readFile=readFile
         self._occupied = occupied
+        if self._occupied == None:
+            self._occupied={}
         self._random_maximum_times=10
         self._col = col
         self._maxPA = max_PA
@@ -326,7 +333,7 @@ class BeeHive(object):
 
                 index = trial[1]
                 # creates a new scout bee randomly
-                self.food_source[index] = Bee(self.randomGeneration(),self._landType_thr)
+                self.food_source[index] = Bee(self.randomGeneration(),self._landType_thr,self._readFile)
 
                 # sends scout bee to exploit its solution vector
                 self.send_employee(index)
@@ -457,18 +464,31 @@ class BeeHive(object):
             print("\n"+"-"*100+"\n")
 
     def writeToFile(self,path):
-        with open(path,"w",encoding="UTF-8") as f:
-            for i,bee in enumerate(self._paretoArchive):
+        new_folder = os.path.join(path,"solutions")
+        i=2
+        while os.path.exists(new_folder):
+            new_folder = os.path.join(path,"solutions(%d)"%i)
+            i+=1
+        os.mkdir(new_folder)
+        os.chdir(new_folder)
+        f_v = open("vectors.txt","w",encoding="UTF-8")
+        for i, bee in enumerate(self._paretoArchive):
+            vectors = bee.vector
+            f_v.write("Vector %-4d: "%(i+1))
+            for vector in vectors:
+                f_v.write("%-20.8f"%(vector))
+            f_v.write("\n")
+            name = "solution-%d.txt"%(i+1)
+            with open(name,"w",encoding="UTF-8") as f:
+
                 matrix = bee.matrix
-                vector = bee.vector
-                f.write("*"*100+"\n")
-                f.write("#"*20+"\tSolution %d\t"%i+"#"*20+"\n")
                 for row in matrix:
                     for col in row:
                         f.write(col)
                         f.write(" ")
                     f.write("\n")
-                f.write("\nVector: %s"%vector)
+        f_v.close()
+
 
 
     @staticmethod
@@ -501,7 +521,8 @@ class BeeHive(object):
 
                 dividend = math.fabs(neighbor_high-neighbor_less)
                 divisor = max_obj.vector[n]-min_obj.vector[n]
-                sum_distance+=dividend/divisor
+                if divisor!=0:
+                    sum_distance+=dividend/divisor
             else:
                 sum_distance+=sys.float_info.max
 
@@ -707,7 +728,7 @@ class BeeHive(object):
         return pos_lookUp
 
     def normalThreshold(self):
-        if self._occupied == None:
+        if self._occupied == {}:
             return
         reduce = {}
         for pos,value in self._occupied.items():

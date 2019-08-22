@@ -1,7 +1,7 @@
-def readInformation(types):
+def readInformation(file,types):
 
     infos={}
-    with open("data2.txt","r",encoding="UTF-8") as f:
+    with open(file,"r",encoding="UTF-8") as f:
         datas = []
         cur_type = f.readline().strip()
         for line in f:
@@ -21,7 +21,7 @@ def readInformation(types):
     return infos
 if __name__ == "__main__":
     from GenerateRandomData import printMatrix
-    infos=readInformation(["湿地","森林","群落"])
+    infos=readInformation("data.txt",["湿地","森林","群落"])
     for key,matrix in infos.items():
         print(key)
 

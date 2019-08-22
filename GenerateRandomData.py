@@ -164,6 +164,8 @@ class generator1():
         return index + 11
 
     def writeToFile(self,fileName,numIndex):
+        ifUpdated= False
+        self._objectiveOrder = []
         with open(fileName, "w", encoding="UTF-8") as f:
             for index in range(numIndex):
                 landType_num=generator1.getLandTypeFromIndex(index)
@@ -172,11 +174,16 @@ class generator1():
                     row_write = ""
                     for col in row:
                         cell = ""
-                        for list in col.values():
+                        for objective,list in col.items():
+                            if not ifUpdated:
+                                self._objectiveOrder.append(objective)
                             cell+="%s,"%list[index]
+                        ifUpdated=True
                         row_write+="%s "%cell.strip(",")
                     f.write(row_write)
                     f.write("\n")
+    def getObjectiveOrder(self):
+        return self._objectiveOrder
 
 class priorityItem():
     def __init__(self,item,priority):
