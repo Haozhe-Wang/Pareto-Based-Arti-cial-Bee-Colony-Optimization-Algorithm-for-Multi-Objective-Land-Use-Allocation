@@ -86,6 +86,8 @@ class generator1():
                     if objective == "landType":
                         continue
                     value=reader.getFile()[numR][numC]
+                    if value<0:
+                        value=0.0
                     data_list = [0] * self._numLandType
                     data_list[index] = value
                     data_dict[objective]=data_list
@@ -298,7 +300,8 @@ class Queue():
 if __name__ == "__main__":
     fileMaps= {"landType":'realData\part(1)\LandUseType11.tif',
                "氮净化":"realData\part(1)\DanJingHua1.tif",
-               "水源涵养":'realData\part(1)\ShuiYuanHanYang1.tif'}
+               "水源涵养":'realData\part(1)\ShuiYuanHanYang1.tif',
+               '实际蒸散':'realData\part(1)\shijizhengsan.tif'}
     typeMaps = {11:"森林",12:'草地',13:'农田',14:'聚落',15:'湿地',16:'荒漠'}
     '''
     # g.readData()

@@ -62,6 +62,8 @@ class Interface():
         readFileEntry = Entry(self._compusoryArea, name="readFile", textvariable=v)
         occupiedSelectButton = Button(self._compusoryArea, text="选择文件",
                                     command=askFile)
+        noticeLabel = Label(self._compusoryArea, text = "提示：如果需要找最小值，"
+                                                        "请将文件数值改为负数",fg="red")
 
 
         self._entries["row"]=rowEntry
@@ -80,6 +82,8 @@ class Interface():
         readFileLabel.grid(row=3,column=0)
         readFileEntry.grid(row=3, column=1)
         occupiedSelectButton.grid(row=3, column=2)
+
+        noticeLabel.grid(row =4, column=0,columnspan=3)
 
     def createOptionalArea(self):
         boolVal = BooleanVar()
