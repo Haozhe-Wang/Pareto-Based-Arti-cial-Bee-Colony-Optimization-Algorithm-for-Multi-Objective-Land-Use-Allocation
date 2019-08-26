@@ -7,19 +7,22 @@ import time
 from threading import Thread
 import exhibit
 from multiprocessing import Process
+from GenerateRandomData import generator1
+from generateWeight import WeightsCreater
 class Interface():
-    PARAM_KEY_TEMPLATE = ["row","col","dim","readFile","occupied","numb_bees","landType_thr",
+    PARAM_KEY_TEMPLATE = ["row","col","dim","readFile","types","occupied","numb_bees","landType_thr",
                             "max_itrs","max_trials","max_PA","max_FS","mutate_per","verbose"]
     def __init__(self,root):
         self._root = root
         self._outputPath = os.getcwd()
+        self._recentOpenedFile = os.getcwd()
         self._occupiedFile = os.getcwd()
         self._verbose= True
         self._executionProcess = None
         self._ifHaveOccupiedArea=False
         self._fileTypeMaps={"森林":11,'草地':12,'农田':13,'聚落':14,'湿地':15,'荒漠':16}
         self._fileTypeEntries=[]  # typo, this means the land type same as above
-        self._args = [None, None, None,None, {}, 30, None, 100, 40, 100, 20, 0.3, True]
+        self._args = [None, None, None,None,None, {}, 30, None, 100, 40, 100, 20, 0.3, True]
         self._entries = {}
         self.setWindow()
         self.createWedgets()
@@ -35,12 +38,126 @@ class Interface():
         self._root.geometry('%dx%d+%d+%d' % (w, h, x, y))
         self._root.resizable(width=True, height=True)
     def createWedgets(self):
+        self.createRandomDataArea()
         self.createCompusoryArea()
         self.createOptionalArea()
         self.createLandTypeInputArea()
         self.createOccupiedArea()
         self.createExecutionArea()
         self.createShowArea()
+
+    def createRandomDataArea(self):
+        self._randomDataArea = Frame(self._root)
+        self._randomDataArea.pack()
+
+        Button(self._randomDataArea,text = "产生随机数据",command = self.createRandomDataDialog).pack()
+
+    def createRandomDataDialog(self):
+        dialog = Toplevel(self._root,padx=20,pady=10)
+        x = self._root.winfo_x() + 100
+        y = self._root.winfo_y() + 50
+        dialog.geometry("680x650+%d+%d" % (x, y))
+        dialog.title("产生随机数据")
+
+        rowFrame = Frame(dialog)
+        rowFrame.pack(side=TOP)
+        Label(rowFrame,text="产生行数").pack(side=LEFT)
+        row_v = IntVar()
+        rowEntry = Entry(rowFrame,textvariable = row_v)
+        rowEntry.pack(side=LEFT)
+
+        colFrame = Frame(dialog)
+        colFrame.pack(side=TOP)
+        Label(colFrame, text="产生列数").pack(side=LEFT)
+        col_v = IntVar()
+        colEntry = Entry(colFrame, textvariable=col_v)
+        colEntry.pack(side=LEFT)
+
+
+        remindFrame=Frame(dialog)
+        remindFrame.pack(side=TOP)
+        Label(remindFrame, text="对应土地类型数量\n（空则默认从（土地类型文件中读取））").grid(row=0, column=0)
+        landNum= StringVar()
+        Entry(remindFrame,textvariable = landNum).grid(row=0,column=1)
+
+
+
+        v_landtype = StringVar()
+        frames=set()
+        def askFile(var):
+            if var.get() == "":
+                var.set(self._recentOpenedFile)
+            path = filedialog.askopenfilename(initialdir=var,
+                                              title="选择文件",
+                                              filetypes=(("TIFF 文件", "*.tif"),))
+            self._recentOpenedFile = path
+
+        def delete(widget):
+            widget.master.destroy()
+            frames.remove(widget.master)
+
+        def add():
+            objectiveFrame = Frame(dialog)
+            objectiveFrame.pack(side=TOP)
+            Label(objectiveFrame,text="指标名称").grid(row=0, column=0)
+            objName = StringVar()
+            objectiveNameEntry = Entry(objectiveFrame,name="objectiveName",textvariable=objName)
+            objectiveNameEntry.grid(row=0,column=1)
+            Label(objectiveFrame, text="文件路径").grid(row=1, column=0)
+            fileVar = StringVar()
+            readFileEntry = Entry(objectiveFrame, name="file", textvariable=fileVar)
+            readFileEntry.grid(row=1, column=1, padx=10)
+            Button(objectiveFrame, text="选择文件", command=lambda: askFile(fileVar)).grid(row=1, column=2)
+            deleteButton = Button(objectiveFrame,text="删除",command=lambda :delete(deleteButton))
+            deleteButton.grid(row=0,column=3,rowspan=2,sticky=N+S+E+W,padx=10)
+            objectiveFrame.pack(side=TOP)
+            frames.add(objectiveFrame)
+
+
+
+        landtypeFrame = Frame(dialog,name="landtype")
+        landtypeFrame.pack(side=TOP)
+        Label(landtypeFrame, text="土地类型文件").grid(row=0, column=0)
+        readFileEntry = Entry(landtypeFrame, name="file", textvariable=v_landtype)
+        readFileEntry.grid(row=0, column=1,padx=10)
+        Button(landtypeFrame, text="选择文件", command=lambda :askFile(v_landtype)).grid(row=0, column=2)
+        landtypeFrame.pack(side=TOP)
+
+        Button(dialog,text="添加读取文件",command=add).pack(side=TOP)
+
+        executeFrame=Frame(dialog)
+        executeFrame.pack(side=BOTTOM)
+        Button(executeFrame, text="放弃", command=dialog.destroy, width=7).pack(side=LEFT)
+        exeButton = Button(executeFrame, text="产生", command=lambda :self._dialogExecute(
+            row_v.get(),col_v.get(),landNum.get(),frames,readFileEntry.get(),exeButton
+        ), width=7)
+        exeButton.pack(side=RIGHT)
+
+    def _dialogExecute(self,row,col,landNum,frames,landtypePath,exeButton):
+        if landNum=="":
+            landNum=None
+        else:
+            try:
+                landNum=int(landNum)
+            except:
+                self.popup("土地类型个数应为整数")
+                return
+        if landtypePath=="":
+            self.popup("土地类型文件为空")
+            return
+
+        fileMaps={"landType":landtypePath}
+        for frame in frames:
+            objective = frame._nametowidget("objectiveName").get()
+            path = frame._nametowidget("file").get()
+            fileMaps[objective]=path
+        generate = GenerateRandomData(row,col,fileMaps,landNum,exeButton,self)
+        generate.start()
+        exeButton.config(text = "运行中")
+
+
+
+
 
     def createCompusoryArea(self):
         self._compusoryArea = Frame(self._root)
@@ -65,11 +182,16 @@ class Interface():
         noticeLabel = Label(self._compusoryArea, text = "提示：如果需要找最小值，"
                                                         "请将文件数值改为负数",fg="red")
 
+        typeLabel = Label(self._compusoryArea, text="输入土地类型（'\\'隔开）")
+        self._typeVar = StringVar()
+        typeEntry = Entry(self._compusoryArea, name="types",textvariable=self._typeVar)
+
 
         self._entries["row"]=rowEntry
         self._entries["col"] = colEntry
         self._entries["dim"] = dimEntry
         self._entries["readFile"] = readFileEntry
+        self._entries["types"]= typeEntry
         rowLabel.grid(row=0, column=0)
         rowEntry.grid(row=0, column=1)
 
@@ -84,6 +206,14 @@ class Interface():
         occupiedSelectButton.grid(row=3, column=2)
 
         noticeLabel.grid(row =4, column=0,columnspan=3)
+        typeLabel.grid(row=5, column=0)
+        typeEntry.grid(row=5, column=1)
+
+    def _autoCompeleteTypeEntry(self,order):
+        types=""
+        for type in order:
+            types+=str(type)+"\\"
+        self._typeVar.set(types)
 
     def createOptionalArea(self):
         boolVal = BooleanVar()
@@ -363,6 +493,11 @@ class Interface():
             if value=="":
                 self.popup("输出文件没有值")
                 return False,None
+        elif entry in [self._entries["types"]]:
+            if value=="":
+                self.popup("输出文件没有值")
+                return False,None
+            value = value.split("\\")
         else:
             try:
                 value=int(value)
@@ -490,7 +625,27 @@ class CheckProcess(Thread):
         return new
 
 
-
+class GenerateRandomData(Thread):
+    def __init__(self,row,col,fileMap,numLandType,exeButton,gui):
+        Thread.__init__(self)
+        self._row = row
+        self._col = col
+        self._fileMap = fileMap
+        self._numLandType = numLandType
+        self._exeButton=exeButton
+        self._gui = gui
+    def run(self):
+        a = WeightsCreater(row=self._row, col=self._col)
+        a.create()
+        g = generator1(self._fileMap, a.getWeights(), self._row, self._col,numLandType=self._numLandType)
+        g.readData()
+        g.completeGraph()
+        # results = g.getResult()
+        g.writeToFile("data2.txt")
+        self._exeButton.config(text = "执行")
+        self._gui.popup("运行成功！\n指标顺序： %s"%g.getObjectiveOrder())
+        types = [i for i in range(11,11+g.NumLandType())]
+        self._gui._autoCompeleteTypeEntry(types)
 
 
 

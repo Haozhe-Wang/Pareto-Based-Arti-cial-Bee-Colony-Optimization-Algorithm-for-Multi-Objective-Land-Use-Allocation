@@ -89,7 +89,7 @@ def run():
     # occupied={(1,2):"湿地",(5,3):"森林",(0,0):"聚落"}
     occupied = readUnchangeArea('realData\part(1)\LandUseType11.tif',[14])
     model = ABCalgorithm.BeeHive(
-                         140,  140,2,
+                         140,  140,2,["森林", "草地", "农田", "聚落", "湿地", "荒漠"],
                          occupied = occupied    ,
                          landType_thr=landType_thr,
                          numb_bees =  40       ,

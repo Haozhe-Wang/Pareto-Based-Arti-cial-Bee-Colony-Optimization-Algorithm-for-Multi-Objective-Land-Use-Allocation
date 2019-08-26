@@ -43,7 +43,7 @@ class generator1():
     #this generator is based on the real data set
     # will guess data based on nearest value from the current raster cell
     # the decision of nearest value is based both on weight and on distance
-    def __init__(self,fileMaps,typeMaps,weights,row=None,col=None,numLandType=None):
+    def __init__(self,fileMaps,weights,row=None,col=None,numLandType=None):
         """
         :param fileMaps:  dict key: is the objective name,value is the file name where it is located. Note: Must include a key called landType
         :param typeMaps:  dict key: is the number in landUseType.tif file, value is the land type name
@@ -58,19 +58,24 @@ class generator1():
         self._row = row
         self._col = col
         self._weights= weights
-        self._typeMaps = typeMaps
-        if numLandType == None:
-            self._numLandType = len(self._typeMaps)
-        else:
-            self._numLandType = numLandType
+        self._numLandType = numLandType
         # the result is a list of lists, and the inner list contains row numbers of dictionaries
         # which key is objective,value is a list of values,
         # the list's index corresponds to each land type which is determined by getIndexFromLandType(num) function
         self._result=[]
+    def getNumLandType(self,landtype):
+        for row in landtype:
+            for col in row:
+                n = int(generator1.getIndexFromLandType(col))
+                if self._numLandType==None or self._numLandType<n:
+                    self._numLandType=n
+        self._numLandType+=1
     def readData(self):
         for name,path in self._fileMaps.items():
             self._readerMaps[name]=Reader(path)
         landType = self._readerMaps["landType"].getFile()
+        if self._numLandType == None:
+            self.getNumLandType(landType)
         if self._row == None:
             self._row= len(landType)
             if self._row>0 and self._col == None:
@@ -79,7 +84,6 @@ class generator1():
             result_row = []
             for numC in range(self._col):
                 landType_num = landType[numR][numC]
-                landTypeName = self._typeMaps[landType_num]
                 data_dict = {}
                 index = generator1.getIndexFromLandType(landType_num)
                 for objective,reader in self._readerMaps.items():
@@ -165,13 +169,13 @@ class generator1():
         # if change land type number, please change here!!!!
         return index + 11
 
-    def writeToFile(self,fileName,numIndex):
+    def writeToFile(self,fileName):
         ifUpdated= False
         self._objectiveOrder = []
         with open(fileName, "w", encoding="UTF-8") as f:
-            for index in range(numIndex):
+            for index in range(self._numLandType):
                 landType_num=generator1.getLandTypeFromIndex(index)
-                f.write("%s\n"%(self._typeMaps[landType_num]))
+                f.write("%s\n"%(landType_num))
                 for row in self._result:
                     row_write = ""
                     for col in row:
@@ -186,6 +190,8 @@ class generator1():
                     f.write("\n")
     def getObjectiveOrder(self):
         return self._objectiveOrder
+    def NumLandType(self):
+        return self._numLandType
 
 class priorityItem():
     def __init__(self,item,priority):
@@ -302,7 +308,8 @@ if __name__ == "__main__":
                "氮净化":"realData\part(1)\DanJingHua1.tif",
                "水源涵养":'realData\part(1)\ShuiYuanHanYang1.tif',
                '实际蒸散':'realData\part(1)\shijizhengsan.tif'}
-    typeMaps = {11:"森林",12:'草地',13:'农田',14:'聚落',15:'湿地',16:'荒漠'}
+    # typeMaps = {11:"森林",12:'草地',13:'农田',14:'聚落',15:'湿地',16:'荒漠'}
+    # typeMaps = {11: "11", 12: '12', 13: '13', 14: '14', 15: '15', 16: '16'}
     '''
     # g.readData()
     # result = g.getResult()
@@ -330,7 +337,7 @@ if __name__ == "__main__":
     '''
     a = WeightsCreater(row=144, col=144)
     a.create()
-    g = generator1(fileMaps, typeMaps,a.getWeights(), 144, 144)
+    g = generator1(fileMaps,a.getWeights(), 144, 144)
     g.readData()
     temp_result = g.result
     '''with open("orinaldata/originalData3.txt","w",encoding="UTF-8") as f:
@@ -343,7 +350,7 @@ if __name__ == "__main__":
     g.completeGraph()
 
     results = g.getResult()
-    g.writeToFile("data2.txt",6)
+    g.writeToFile("data2.txt")
 
 
 

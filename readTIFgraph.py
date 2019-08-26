@@ -1,4 +1,6 @@
 import cv2
+import numpy as np
+from scipy import misc
 class Reader():
     def __init__(self,path,mode=-1):
         """
@@ -24,7 +26,15 @@ class Reader():
             else:
                 lst=[toType(val) for val in row]
         return lst
+class Writer():
+    def __init__(self,path,matrix):
+        self._path=path
+        self._matrix=matrix
+    def write(self):
+        matrix = np.array(self._matrix,dtype=np.int)
+        cv2.imwrite(self._path,matrix)
 if __name__ == "__main__":
+    '''
     # file = cv2.imread("realData\part(1)\DanJingHua1.tif",2)
     file = cv2.imread("realData\part(1)\LandUseType11.tif",-2)
     # print(len(file))
@@ -35,3 +45,11 @@ if __name__ == "__main__":
             c=c-11
             l[c]+=1
     print(l)
+    '''
+    w=Writer("a.tif",[[1,2],[2,3]])
+    w.write()
+    for i in Reader("a.tif").getFile():
+        for k in i:
+            print(k)
+        print()
+

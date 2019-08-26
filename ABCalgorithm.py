@@ -9,6 +9,7 @@ import logging
 import os
 from GenerateRandomData import printMatrix,getMatrix
 from readInformation import readInformation
+from readTIFgraph import Writer
 
 
 # ---- BEE CLASS
@@ -16,7 +17,7 @@ from readInformation import readInformation
 class Bee(object):
     """ Creates a bee object. """
 
-    def __init__(self, matrix, landType_thr,readFile):
+    def __init__(self, matrix, landType_thr,readFile,types):
         """
 
         Instantiates a bee object randomly.
@@ -28,6 +29,7 @@ class Bee(object):
 
         """
         self._vector = []
+        self._types = types
         self._readFile=readFile
         assert type(matrix)==list
         self._matrix = matrix
@@ -45,8 +47,8 @@ class Bee(object):
     def calculateVector(self):
         #todo: this should be replaced by model function(得到各种类型在不同栅格的指标是多少）
         #必须返回 dict 类型 --> key：土地类型（例：森林） value：矩阵（每个栅格对应这个类型的各个指标）
-        types = ["森林","草地","农田","聚落","湿地","荒漠"]
-        info = readInformation(self._readFile,types)
+
+        info = readInformation(self._readFile,self._types)
         self._vector=self._calculateVector(info)
 
     def _calculateVector(self,info):
@@ -127,7 +129,8 @@ class BeeHive(object):
                                 datefmt='%a, %d %b %Y %H:%M:%S')
             logging.info("print")
             # creates a bee hive
-            self.food_source = [Bee(self.randomGeneration(), self._landType_thr,self._readFile) for i in range(self.size)]
+            self.food_source = [Bee(self.randomGeneration(), self._landType_thr,self._readFile,self._types)
+                                for i in range(self.size)]
             # employees phase
             for index in range(self.size):
                 self.send_employee(index)
@@ -153,6 +156,7 @@ class BeeHive(object):
                  col                  ,
                  dim                  ,
                  readFile             ,
+                 types                ,
                  occupied=        None,
                  numb_bees    =  30   ,
                  landType_thr = None ,
@@ -179,6 +183,7 @@ class BeeHive(object):
             :param int col             : number of columns of the solution
             :param int dim             : number of dimension of the solution
             :param str readFile        : the file path that is used for data
+            :param list types          : a list of all land types
             :param dict occupied       : including the cells that shouldn't be changed
             :param int numb_bees       : number of active bees within the hive
             :param dict landType_thr   : threshold of each land type numbers
@@ -191,6 +196,7 @@ class BeeHive(object):
         """
         self._paretoArchive = []
         self._row = row
+        self._types = types
         self._readFile=readFile
         self._occupied = occupied
         if self._occupied == None:
@@ -333,7 +339,7 @@ class BeeHive(object):
 
                 index = trial[1]
                 # creates a new scout bee randomly
-                self.food_source[index] = Bee(self.randomGeneration(),self._landType_thr,self._readFile)
+                self.food_source[index] = Bee(self.randomGeneration(),self._landType_thr,self._readFile,self._types)
 
                 # sends scout bee to exploit its solution vector
                 self.send_employee(index)
@@ -478,15 +484,16 @@ class BeeHive(object):
             for vector in vectors:
                 f_v.write("%-20.8f"%(vector))
             f_v.write("\n")
-            name = "solution-%d.txt"%(i+1)
-            with open(name,"w",encoding="UTF-8") as f:
+            name = "solution-%d.tif"%(i+1)
+            Writer(name,bee.matrix).write()
+            '''with open(name,"w",encoding="UTF-8") as f:
 
                 matrix = bee.matrix
                 for row in matrix:
                     for col in row:
                         f.write(col)
                         f.write(" ")
-                    f.write("\n")
+                    f.write("\n")'''
         f_v.close()
 
 
