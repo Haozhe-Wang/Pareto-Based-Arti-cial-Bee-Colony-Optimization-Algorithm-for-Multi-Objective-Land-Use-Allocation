@@ -54,6 +54,8 @@ class Interface():
 
     def createRandomDataDialog(self):
         dialog = Toplevel(self._root,padx=20,pady=10)
+        dialog.attributes("-toolwindow", 1)
+        dialog.wm_attributes("-topmost", 1)
         x = self._root.winfo_x() + 100
         y = self._root.winfo_y() + 50
         dialog.geometry("680x650+%d+%d" % (x, y))
@@ -87,10 +89,11 @@ class Interface():
         def askFile(var):
             if var.get() == "":
                 var.set(self._recentOpenedFile)
-            path = filedialog.askopenfilename(initialdir=var,
+            path = filedialog.askopenfilename(parent=dialog,initialdir=var,
                                               title="选择文件",
                                               filetypes=(("TIFF 文件", "*.tif"),))
             self._recentOpenedFile = path
+            var.set(path)
 
         def delete(widget):
             widget.master.destroy()
@@ -121,7 +124,14 @@ class Interface():
         readFileEntry = Entry(landtypeFrame, name="file", textvariable=v_landtype)
         readFileEntry.grid(row=0, column=1,padx=10)
         Button(landtypeFrame, text="选择文件", command=lambda :askFile(v_landtype)).grid(row=0, column=2)
-        landtypeFrame.pack(side=TOP)
+
+        v_weight=StringVar()
+        weightFrame = Frame(dialog)
+        weightFrame.pack(side=TOP)
+        Label(weightFrame,text="选择权重读取文件").grid(row=0,column=0)
+        readWeightEntry = Entry(weightFrame,textvariable = v_weight )
+        readWeightEntry.grid(row=0, column=1, padx=10)
+        Button(weightFrame,text="选取文件",command =lambda :askFile(v_weight)).grid(row=0, column=2)
 
         Button(dialog,text="添加读取文件",command=add).pack(side=TOP)
 
@@ -129,11 +139,11 @@ class Interface():
         executeFrame.pack(side=BOTTOM)
         Button(executeFrame, text="放弃", command=dialog.destroy, width=7).pack(side=LEFT)
         exeButton = Button(executeFrame, text="产生", command=lambda :self._dialogExecute(
-            row_v.get(),col_v.get(),landNum.get(),frames,readFileEntry.get(),exeButton
+            row_v.get(),col_v.get(),landNum.get(),frames,readFileEntry.get(),exeButton,readWeightEntry.get()
         ), width=7)
         exeButton.pack(side=RIGHT)
 
-    def _dialogExecute(self,row,col,landNum,frames,landtypePath,exeButton):
+    def _dialogExecute(self,row,col,landNum,frames,landtypePath,exeButton,weightPath):
         if landNum=="":
             landNum=None
         else:
@@ -151,7 +161,7 @@ class Interface():
             objective = frame._nametowidget("objectiveName").get()
             path = frame._nametowidget("file").get()
             fileMaps[objective]=path
-        generate = GenerateRandomData(row,col,fileMaps,landNum,exeButton,self)
+        generate = GenerateRandomData(row,col,fileMaps,landNum,exeButton,weightPath,self)
         generate.start()
         exeButton.config(text = "运行中")
 
@@ -535,6 +545,8 @@ class Interface():
 
     def popup(self,msg):
         dialog = Toplevel(self._root,padx = 20, pady = 10)
+        dialog.attributes("-toolwindow", 1)
+        dialog.wm_attributes("-topmost", 1)
         x = self._root.winfo_x() + 300
         y = self._root.winfo_y() + 250
         dialog.geometry("280x150+%d+%d" % (x, y))
@@ -626,16 +638,18 @@ class CheckProcess(Thread):
 
 
 class GenerateRandomData(Thread):
-    def __init__(self,row,col,fileMap,numLandType,exeButton,gui):
+    def __init__(self,row,col,fileMap,numLandType,exeButton,weightPath,gui):
         Thread.__init__(self)
         self._row = row
         self._col = col
         self._fileMap = fileMap
         self._numLandType = numLandType
+        self._weightPath = weightPath
         self._exeButton=exeButton
         self._gui = gui
     def run(self):
-        a = WeightsCreater(row=self._row, col=self._col)
+        self._weight = self._readWeight()
+        a = WeightsCreater(matrix=self._weight,row=self._row, col=self._col)
         a.create()
         g = generator1(self._fileMap, a.getWeights(), self._row, self._col,numLandType=self._numLandType)
         g.readData()
@@ -646,6 +660,13 @@ class GenerateRandomData(Thread):
         self._gui.popup("运行成功！\n指标顺序： %s"%g.getObjectiveOrder())
         types = [i for i in range(11,11+g.NumLandType())]
         self._gui._autoCompeleteTypeEntry(types)
+    def _readWeight(self):
+        if self._weightPath=="":
+            return
+        matrix = []
+        for row in readTIFgraph.Reader(self._weightPath).getFile():
+            matrix.append([float(col) for col in row])
+        return matrix
 
 
 

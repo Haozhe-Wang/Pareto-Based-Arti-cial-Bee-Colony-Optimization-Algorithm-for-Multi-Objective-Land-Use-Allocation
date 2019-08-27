@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-from scipy import misc
 class Reader():
     def __init__(self,path,mode=-1):
         """
