@@ -134,7 +134,7 @@ class BeeHive(object):
             # employees phase
             for index in range(self.size):
                 self.send_employee(index)
-            self.trim(self.food_source,self._maxFS)
+            self.food_source=self.trim(self.food_source,self._maxFS)
 
             # onlookers phase
             self.send_onlookers()
@@ -143,7 +143,7 @@ class BeeHive(object):
             self.send_scout()
 
             self._paretoArchive+=self.food_source
-            self.trim(self._paretoArchive,self._maxPA)
+            self._paretoArchive=self.trim(self._paretoArchive,self._maxPA)
 
             # prints out information about computation
             if self.verbose:
@@ -587,11 +587,11 @@ class BeeHive(object):
             bee_ix = random.randint(0, len(self.food_source)-1)
         return self._mutateAndCrossover(copy.deepcopy(bee),copy.deepcopy(self.food_source[bee_ix]))
     def _mutateAndCrossover(self,bee,otherBee):
-        newBee=self._mutate(bee)
+        newBee=self._mutate(copy.deepcopy(bee))
         logging.info(-1)
         newBee = self.chooseBetterSolutionBee(bee,newBee)
         logging.info(0)
-        newBee1,newBee2 =self._crossover(newBee,otherBee)
+        newBee1,newBee2 =self._crossover(copy.deepcopy(newBee),copy.deepcopy(otherBee))
         logging.info("print2")
         return [newBee1,newBee2]
 
@@ -608,7 +608,7 @@ class BeeHive(object):
         """
         num_cell = int((self._row * self._col-self._numOccupied)*self._mutatePer)
         matrix = bee.matrix
-        for i in range(num_cell):
+        for k in range(num_cell):
             row1,row2,col1,col2=0,0,0,0
             # only iterate to maximum of 10 times, in case of extreme conditions making the program running infinitely
             for i in range(self._random_maximum_times):

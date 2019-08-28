@@ -16,11 +16,12 @@ class Interface():
         self._root = root
         self._outputPath = os.getcwd()
         self._recentOpenedFile = os.getcwd()
+        self._haveValidOccupied=False
         self._occupiedFile = os.getcwd()
         self._verbose= True
         self._executionProcess = None
         self._ifHaveOccupiedArea=False
-        self._fileTypeMaps={"森林":11,'草地':12,'农田':13,'聚落':14,'湿地':15,'荒漠':16}
+        # self._fileTypeMaps={"森林":11,'草地':12,'农田':13,'聚落':14,'湿地':15,'荒漠':16}
         self._fileTypeEntries=[]  # typo, this means the land type same as above
         self._args = [None, None, None,None,None, {}, 30, None, 100, 40, 100, 20, 0.3, True]
         self._entries = {}
@@ -366,6 +367,9 @@ class Interface():
                                                             filetypes=(("TIFF 文件", "*.tif"),))
             v.set(path)
             self._occupiedFile=v.get()
+            executeButton = self._excutionArea.nametowidget("execute")
+            executeButton.config(state=DISABLED)
+            self._haveValidOccupied = False
 
 
         boolVar = BooleanVar()
@@ -374,8 +378,13 @@ class Interface():
             self._ifHaveOccupiedArea=value
             if value:
                 occupiedArea.pack()
+                if not self._haveValidOccupied:
+                    executeButton = self._excutionArea.nametowidget("execute")
+                    executeButton.config(state=DISABLED)
             else:
                 occupiedArea.pack_forget()
+                executeButton = self._excutionArea.nametowidget("execute")
+                executeButton.config(state=NORMAL)
 
         askLabel = Label(askFrame,text = "是否需要输入不改变的区域：")
 
@@ -396,27 +405,30 @@ class Interface():
         fileTypeFrame = Frame(occupiedArea)
         fileTypeFrame.grid(row=1,column=0,columnspan=3)
         # make sure file type values
-        Label(fileTypeFrame,text = "请确定土地类型值是否对应正确").grid(row=0,column=0,columnspan=12)
-        i=0
-        for objective,value in self._fileTypeMaps.items():
-            Label(fileTypeFrame,text=objective).grid(row=1,column=i*2)
-            e=Entry(fileTypeFrame,width=5)
-            e.grid(row=1,column=i*2+1)
-            e.insert(0,value)
-            self._fileTypeEntries.append((objective,e))
-            i+=1
+        # Label(fileTypeFrame,text = "请确定土地类型值是否对应正确").grid(row=0,column=0,columnspan=12)
+        # i=0
+        # for objective,value in self._fileTypeMaps.items():
+        #     Label(fileTypeFrame,text=objective).grid(row=1,column=i*2)
+        #     e=Entry(fileTypeFrame,width=5)
+        #     e.grid(row=1,column=i*2+1)
+        #     e.insert(0,value)
+        #     self._fileTypeEntries.append((objective,e))
+        #     i+=1
         self._showOccupiedNumArea = Frame(occupiedArea)
         def readTIF():
             self._occupiedFile = v.get()
-            for tuple in self._fileTypeEntries:
-                name=tuple[0]
-                frame=tuple[1]
-                valid,value = self._validateFileType(name,frame)
-                if valid:
-                    self._fileTypeMaps[name]=value
-                else:
-                    return False
+            # for tuple in self._fileTypeEntries:
+            #     name=tuple[0]
+            #     frame=tuple[1]
+            #     valid,value = self._validateFileType(name,frame)
+            #     if valid:
+            #         self._fileTypeMaps[name]=value
+            #     else:
+            #         return False
             self._readTIFfiles()
+            executeButton = self._excutionArea.nametowidget("execute")
+            executeButton.config(state=NORMAL)
+            self._haveValidOccupied=True
         Button(self._showOccupiedNumArea,text="计算占用的数值",command=readTIF).pack()
         alertLabel = Label(occupiedArea, text="请保证您读取的文件路径中仅存在英文，不可有中文和空格\n"
                                                     "文件中0值代表可以改变的区域，其他值对应相应土地类型",
@@ -430,7 +442,7 @@ class Interface():
         self._excutionArea = Frame(self._root)
         self._excutionArea.pack()
         #todo add command
-        startButton = Button(self._excutionArea,text = "执行",command = self._executeABC)
+        startButton = Button(self._excutionArea,text = "执行",command = self._executeABC,name="execute")
         stopButton = Button(self._excutionArea, text="停止",command = self._stopABC)
         startButton.pack(side = LEFT)
         stopButton.pack(side=RIGHT)
@@ -468,15 +480,16 @@ class Interface():
                 return False
         pos = Interface.PARAM_KEY_TEMPLATE.index("landType_thr")
         self._args[pos]=landTypes
-        if self._ifHaveOccupiedArea:
-            for tuple in self._fileTypeEntries:
-                name=tuple[0]
-                frame=tuple[1]
-                valid,value = self._validateFileType(name,frame)
-                if valid:
-                    self._fileTypeMaps[name]=value
-                else:
-                    return False
+        # if self._ifHaveOccupiedArea:
+        #     self._readTIFfiles()
+            # for tuple in self._fileTypeEntries:
+            #     name=tuple[0]
+            #     frame=tuple[1]
+            #     valid,value = self._validateFileType(name,frame)
+            #     if valid:
+            #         self._fileTypeMaps[name]=value
+            #     else:
+            #         return False
         return True
 
     def _validate(self,entry,name):
@@ -572,16 +585,16 @@ class Interface():
         showText.configure(yscrollcommand=scroll.set)
 
     def _readTIFfiles(self):
-        CheckProcess(self._occupiedFile,self._fileTypeMaps,self).start()
+        CheckProcess(self._occupiedFile,self).start()
 
-    def updateLandTypeNums(self,result):
+    def updateLandTypeNums(self,result,occupied):
         for child in self._showOccupiedNumArea.winfo_children():
             if isinstance(child,Label):
                 child.pack_forget()
         for type,num in result.items():
             Label(self._showOccupiedNumArea,text="%s: %s"%(type,len(num))).pack(side=LEFT)
         pos = Interface.PARAM_KEY_TEMPLATE.index("occupied")
-        self._args[pos]=result
+        self._args[pos]=occupied
 
 class ABCProcess(Process):
     def __init__(self,args,outputPath):
@@ -610,31 +623,34 @@ class ABCProcess(Process):
             exhibit.show(dataSet)
 
 class CheckProcess(Thread):
-    def __init__(self,path,landTypeMap,interface):
+    def __init__(self,path,interface):
         Thread.__init__(self)
         self._path=path
-        self._landTypeMap = self.switch(landTypeMap)
+        # self._landTypeMap = self.switch(landTypeMap)
         self._result={}
+        self._occupied={}
         self._interface=interface
     def run(self):
         reader= readTIFgraph.Reader(self._path)
         graph= reader.getFile()
         for r,row in enumerate(graph):
             for c,col in enumerate(row):
-                if col == 0 or col not in self._landTypeMap:
+                if col == 0 :
                     continue
-                type = self._landTypeMap[col]
-                if type in self._result:
-                    self._result[type].append((r,c))
+                # type = self._landTypeMap[col]
+                col = str(col)
+                if col in self._result:
+                    self._result[col].append((r,c))
                 else:
-                    self._result[type]=[(r,c)]
-        self._interface.updateLandTypeNums(self._result)
+                    self._result[col]=[(r,c)]
+                self._occupied[(r,c)]=col
+        self._interface.updateLandTypeNums(self._result,self._occupied)
 
-    def switch(self,old):
-        new={}
-        for k,v in old.items():
-            new[v]=k
-        return new
+    # def switch(self,old):
+    #     new={}
+    #     for k,v in old.items():
+    #         new[v]=k
+    #     return new
 
 
 class GenerateRandomData(Thread):
