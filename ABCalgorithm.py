@@ -17,7 +17,7 @@ from readTIFgraph import Writer
 class Bee(object):
     """ Creates a bee object. """
 
-    def __init__(self, matrix, landType_thr,readFile,types):
+    def __init__(self, matrix, landType_thr,readFile,types,trans_prob):
         """
 
         Instantiates a bee object randomly.
@@ -31,6 +31,7 @@ class Bee(object):
         self._vector = []
         self._types = types
         self._readFile=readFile
+        self._trans_prob = trans_prob
         assert type(matrix)==list
         self._matrix = matrix
         self._fitness = sys.float_info.max
@@ -62,6 +63,8 @@ class Bee(object):
             for col in range(len(self._matrix[row])):
                 type = self._matrix[row][col]
                 value = info[type][row][col]
+                if self._trans_prob!=None:
+                    value = value * self._trans_prob[row][col]
                 # self._pos_lookUp[type].append((row,col))
                 if vector == []:
                     vector = value
@@ -86,7 +89,7 @@ class Bee(object):
         return self._fitness
     def getCounter(self):
         return self._counter
-    def incCounter(self,counter):
+    def incCounter(self):
         self._counter+=1
     def __str__(self):
         output=""
@@ -129,7 +132,7 @@ class BeeHive(object):
                                 datefmt='%a, %d %b %Y %H:%M:%S')
             logging.info("print")
             # creates a bee hive
-            self.food_source = [Bee(self.randomGeneration(), self._landType_thr,self._readFile,self._types)
+            self.food_source = [Bee(self.randomGeneration(), self._landType_thr,self._readFile,self._types,self._trans_prob)
                                 for i in range(self.size)]
             # employees phase
             for index in range(self.size):
@@ -157,6 +160,7 @@ class BeeHive(object):
                  dim                  ,
                  readFile             ,
                  types                ,
+                 trans_prob=None      ,
                  occupied=        None,
                  numb_bees    =  30   ,
                  landType_thr = None ,
@@ -184,6 +188,7 @@ class BeeHive(object):
             :param int dim             : number of dimension of the solution
             :param str readFile        : the file path that is used for data
             :param list types          : a list of all land types
+            :param list trans_prob     : the probability of transformation from one land type to another(list of dicts of dicts)
             :param dict occupied       : including the cells that shouldn't be changed
             :param int numb_bees       : number of active bees within the hive
             :param dict landType_thr   : threshold of each land type numbers
@@ -199,6 +204,7 @@ class BeeHive(object):
         self._types = types
         self._readFile=readFile
         self._occupied = occupied
+        self._trans_prob = trans_prob
         if self._occupied == None:
             self._occupied={}
         self._random_maximum_times=10
@@ -242,7 +248,7 @@ class BeeHive(object):
             for k in range(len(collection)):
                 if index != k:
                     ifIsDominated,canDecide = self.ifDominated(collection[index],collection[k])
-                    if ifIsDominated==True:
+                    if ifIsDominated==True or collection[index].vector == collection[k].vector:
                         collection.pop(index)
                         index-=1
                         ifAppend=False
@@ -299,7 +305,7 @@ class BeeHive(object):
 
             # sends new onlooker
             self.send_employee(index)
-            self.trim(self.food_source,self._maxFS)
+            self.food_source=self.trim(self.food_source,self._maxFS)
 
             # increments number of onlookers
             numb_onlookers += 1
@@ -339,13 +345,13 @@ class BeeHive(object):
 
                 index = trial[1]
                 # creates a new scout bee randomly
-                self.food_source[index] = Bee(self.randomGeneration(),self._landType_thr,self._readFile,self._types)
+                self.food_source[index] = Bee(self.randomGeneration(),self._landType_thr,self._readFile,self._types,self._trans_prob)
 
                 # sends scout bee to exploit its solution vector
                 self.send_employee(index)
             else:
                 break
-        self.trim(self.food_source,self._maxFS)
+        self.food_source=self.trim(self.food_source,self._maxFS)
 
 
     def _check(self, matrix):
