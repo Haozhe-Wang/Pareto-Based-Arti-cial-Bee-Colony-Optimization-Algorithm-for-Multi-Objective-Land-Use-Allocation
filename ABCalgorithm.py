@@ -6,8 +6,10 @@ import copy
 import math
 import numpy
 import logging
-from implementation.GenerateRandomData import printMatrix,getMatrix
-from implementation.readInformation import readInformation
+import os
+from GenerateRandomData import printMatrix,getMatrix
+from readInformation import readInformation
+from readTIFgraph import Writer
 
 
 # ---- BEE CLASS
@@ -15,7 +17,7 @@ from implementation.readInformation import readInformation
 class Bee(object):
     """ Creates a bee object. """
 
-    def __init__(self, matrix, landType_thr,funcon=None):
+    def __init__(self, matrix, landType_thr,readFile,types,trans_prob):
         """
 
         Instantiates a bee object randomly.
@@ -23,11 +25,13 @@ class Bee(object):
         Parameters:
         ----------
             :param dict landType_thr  :  the threshold of the number of each land type
-            :param def  funcon : constraints function, must return a boolean
 
 
         """
         self._vector = []
+        self._types = types
+        self._readFile=readFile
+        self._trans_prob = trans_prob
         assert type(matrix)==list
         self._matrix = matrix
         self._fitness = sys.float_info.max
@@ -40,27 +44,12 @@ class Bee(object):
 
         self.calculateVector()
 
-        # checks if the problem constraint(s) are satisfied
-        # TODO: can write a constrain function, i.e. checking the limit of the number of certain type
-        if not funcon:
-            self.valid = True
-        else:
-            self.valid = funcon(self._vector)
-
-        '''
-        # computes fitness of solution vector
-        #TODO: change the function to compute the fitness
-        #TODO: this time, fitness may a list of values(vector) in different direction
-        if (fun != None):
-            self.value = fun(self._vector)
-        else:
-            self.value = sys.float_info.max
-        '''
 
     def calculateVector(self):
         #todo: this should be replaced by model function(得到各种类型在不同栅格的指标是多少）
         #必须返回 dict 类型 --> key：土地类型（例：森林） value：矩阵（每个栅格对应这个类型的各个指标）
-        info = readInformation(list(self._landType_thr.keys()))
+
+        info = readInformation(self._readFile,self._types)
         self._vector=self._calculateVector(info)
 
     def _calculateVector(self,info):
@@ -74,6 +63,8 @@ class Bee(object):
             for col in range(len(self._matrix[row])):
                 type = self._matrix[row][col]
                 value = info[type][row][col]
+                if self._trans_prob!=None:
+                    value = value * self._trans_prob[row][col]
                 # self._pos_lookUp[type].append((row,col))
                 if vector == []:
                     vector = value
@@ -82,9 +73,6 @@ class Bee(object):
                     for i in range(len(value)):
                         vector[i] += value[i]
         return vector
-    # def initPosLookUp(self):
-    #     for type in self._landType_thr.keys():
-    #         self._pos_lookUp[type]=[]
     def getVector(self):
         return self._vector
     def setMatrix(self,matrix):
@@ -101,7 +89,7 @@ class Bee(object):
         return self._fitness
     def getCounter(self):
         return self._counter
-    def incCounter(self,counter):
+    def incCounter(self):
         self._counter+=1
     def __str__(self):
         output=""
@@ -144,11 +132,12 @@ class BeeHive(object):
                                 datefmt='%a, %d %b %Y %H:%M:%S')
             logging.info("print")
             # creates a bee hive
-            self.food_source = [Bee(self.randomGeneration(), self._landType_thr) for i in range(self.size)]
+            self.food_source = [Bee(self.randomGeneration(), self._landType_thr,self._readFile,self._types,self._trans_prob)
+                                for i in range(self.size)]
             # employees phase
             for index in range(self.size):
                 self.send_employee(index)
-            self.trim(self.food_source,self._maxFS)
+            self.food_source=self.trim(self.food_source,self._maxFS)
 
             # onlookers phase
             self.send_onlookers()
@@ -157,7 +146,7 @@ class BeeHive(object):
             self.send_scout()
 
             self._paretoArchive+=self.food_source
-            self.trim(self._paretoArchive,self._maxPA)
+            self._paretoArchive=self.trim(self._paretoArchive,self._maxPA)
 
             # prints out information about computation
             if self.verbose:
@@ -168,17 +157,19 @@ class BeeHive(object):
     def __init__(self                 ,
                  row                  ,
                  col                  ,
-                 value_constrain       ,
+                 dim                  ,
+                 readFile             ,
+                 types                ,
+                 trans_prob=None      ,
+                 occupied=        None,
                  numb_bees    =  30   ,
-                 landType_thr = None     ,
+                 landType_thr = None ,
                  max_itrs     = 100   ,
-                 max_trials   = None  ,
+                 max_trials   = 40  ,
                  max_PA       =  100 ,
                  max_FS       =   20,
                  mutate_per   = 0.3   ,
-                 selfun       = None  ,
-                 verbose      = False ,
-                 extra_params = None ,):
+                 verbose      = False ,):
         """
 
         Instantiates a bee hive object.
@@ -194,25 +185,35 @@ class BeeHive(object):
         ----------
             :param int row             : number of rows of the solution
             :param int col             : number of columns of the solution
-            :param dict value_constrain: constrain of solution vector for each value
+            :param int dim             : number of dimension of the solution
+            :param str readFile        : the file path that is used for data
+            :param list types          : a list of all land types
+            :param list trans_prob     : the probability of transformation from one land type to another(list of dicts of dicts)
+            :param dict occupied       : including the cells that shouldn't be changed
             :param int numb_bees       : number of active bees within the hive
             :param dict landType_thr   : threshold of each land type numbers
             :param int max_trials      : max number of trials without any improvment
             :param int max_PA          : max capacity of pareto archive
             :param int max_FS          : max capacity of food source
-            :param def selfun          : custom selection function
             :param float mutate_per    : percentage of cells will be exchanged in mutation phrase
             :param boolean verbose     : makes computation verbose
-            :param dict extra_params   : optional extra arguments for selection function selfun
 
         """
         self._paretoArchive = []
         self._row = row
+        self._types = types
+        self._readFile=readFile
+        self._occupied = occupied
+        self._trans_prob = trans_prob
+        if self._occupied == None:
+            self._occupied={}
         self._random_maximum_times=10
         self._col = col
         self._maxPA = max_PA
         self._maxFS = max_FS
         self._landType_thr = landType_thr #the min and max number of cells of each type can be allocated
+        self._numOccupied = 0
+        self.normalThreshold()
         self._mutatePer=mutate_per
         self.verbose = verbose
         #todo need new function to determine dominance
@@ -222,7 +223,7 @@ class BeeHive(object):
 
         # assigns properties of algorithm
         # dimension
-        self.dim = len(value_constrain)
+        self.dim = dim
         self.max_itrs = max_itrs
 
         #TODO this can be changed
@@ -233,15 +234,9 @@ class BeeHive(object):
         else:
             self.max_trials = max_trials
 
-        # TODO: can be replaced with self defined function
-        # selfun --> computes the probability(of the employed bee share to the onlooker bees)
-        self.selfun = selfun
-        # the parameters used in selfun
-        self.extra_params = extra_params
 
-        # # assigns properties of the optimisation problem
-        # self.evaluate = fun
-        self._value_constrain    = value_constrain
+
+
 
     def trim(self,collection,maxNum):
         result=[]
@@ -253,7 +248,7 @@ class BeeHive(object):
             for k in range(len(collection)):
                 if index != k:
                     ifIsDominated,canDecide = self.ifDominated(collection[index],collection[k])
-                    if ifIsDominated==True:
+                    if ifIsDominated==True or collection[index].vector == collection[k].vector:
                         collection.pop(index)
                         index-=1
                         ifAppend=False
@@ -310,7 +305,7 @@ class BeeHive(object):
 
             # sends new onlooker
             self.send_employee(index)
-            self.trim(self.food_source,self._maxFS)
+            self.food_source=self.trim(self.food_source,self._maxFS)
 
             # increments number of onlookers
             numb_onlookers += 1
@@ -350,13 +345,13 @@ class BeeHive(object):
 
                 index = trial[1]
                 # creates a new scout bee randomly
-                self.food_source[index] = Bee(self.randomGeneration(),self._landType_thr)
+                self.food_source[index] = Bee(self.randomGeneration(),self._landType_thr,self._readFile,self._types,self._trans_prob)
 
                 # sends scout bee to exploit its solution vector
                 self.send_employee(index)
             else:
                 break
-        self.trim(self.food_source,self._maxFS)
+        self.food_source=self.trim(self.food_source,self._maxFS)
 
 
     def _check(self, matrix):
@@ -371,6 +366,8 @@ class BeeHive(object):
         violates = {}
         for r in range(self._row):
             for c in range(self._col):
+                if (r,c) in self._occupied:
+                    continue
                 type =matrix[r][c]
                 if type in violates.keys():
                     violates[type]+=1
@@ -444,7 +441,7 @@ class BeeHive(object):
         for high in high_list:
             while violates[high]>0:
                 selected_type=""
-                while selected_type=="" or (self._landType_thr[selected_type][1] != -1 and
+                while selected_type=="" or (self._landType_thr[selected_type][1] >=0 and
                     (not len(pos_lookUp[selected_type])<self._landType_thr[selected_type][1])):
                     #random select a type to replace the high  type
                     index = random.randint(0, len(normal_list) - 1)
@@ -478,6 +475,35 @@ class BeeHive(object):
             print(bee)
             print("\n"+"-"*100+"\n")
 
+    def writeToFile(self,path):
+        new_folder = os.path.join(path,"solutions")
+        i=2
+        while os.path.exists(new_folder):
+            new_folder = os.path.join(path,"solutions(%d)"%i)
+            i+=1
+        os.mkdir(new_folder)
+        os.chdir(new_folder)
+        f_v = open("vectors.txt","w",encoding="UTF-8")
+        for i, bee in enumerate(self._paretoArchive):
+            vectors = bee.vector
+            f_v.write("Vector %-4d: "%(i+1))
+            for vector in vectors:
+                f_v.write("%-20.8f"%(vector))
+            f_v.write("\n")
+            name = "solution-%d.tif"%(i+1)
+            Writer(name,bee.matrix).write()
+            '''with open(name,"w",encoding="UTF-8") as f:
+
+                matrix = bee.matrix
+                for row in matrix:
+                    for col in row:
+                        f.write(col)
+                        f.write(" ")
+                    f.write("\n")'''
+        f_v.close()
+
+
+
     @staticmethod
     def getVector(bee, index):
         """
@@ -502,31 +528,14 @@ class BeeHive(object):
             max_obj = set[-1]
             min_obj = set[0]
 
-            '''max_vector=[]
-            min_vector=[]
-            target_i=0
-            num_set= len(set)
-            for i in range(len(set)):
-                if i == 0:
-                    max_vector=set[0].vector
-                    min_vector=set[num_set-1].vector
-                else:
-                    temp_vector = set[i].vector
-                    for num in range(len(temp_vector)):
-                        if temp_vector[num] > max_vector[num]:
-                            max_vector[num]=temp_vector[num]
-                        if temp_vector[num]<min_vector[num]:
-                            min_vector[num]=temp_vector[num]
-                if set[i] == target_bee:
-                    target_i=i'''
-
             if target_i>0 and target_i<num_set-1:
                 neighbor_less = set[target_i-1].vector[n]
                 neighbor_high = set[target_i+1].vector[n]
 
                 dividend = math.fabs(neighbor_high-neighbor_less)
                 divisor = max_obj.vector[n]-min_obj.vector[n]
-                sum_distance+=dividend/divisor
+                if divisor!=0:
+                    sum_distance+=dividend/divisor
             else:
                 sum_distance+=sys.float_info.max
 
@@ -538,7 +547,7 @@ class BeeHive(object):
         # generate the number of each land type based on criteria
         num_landType = {}
         landTypes = []
-        num_rasterCell= self._row * self._col
+        num_rasterCell= self._row * self._col - self._numOccupied
         matrix = [[None] * self._col for i in range(self._row)]
         for name,threshold in self._landType_thr.items():
             if threshold[0]<=0:
@@ -562,6 +571,9 @@ class BeeHive(object):
         landTypes=list(self._landType_thr.keys())
         for r in range(self._row):
             for c in range(self._col):
+                if (r,c) in self._occupied:
+                    matrix[r][c] = self._occupied[(r,c)]
+                    continue
                 while 1:
                     num=random.randint(0,len(landTypes)-1)
                     if num_landType[landTypes[num]] > 0:
@@ -581,11 +593,11 @@ class BeeHive(object):
             bee_ix = random.randint(0, len(self.food_source)-1)
         return self._mutateAndCrossover(copy.deepcopy(bee),copy.deepcopy(self.food_source[bee_ix]))
     def _mutateAndCrossover(self,bee,otherBee):
-        newBee=self._mutate(bee)
+        newBee=self._mutate(copy.deepcopy(bee))
         logging.info(-1)
         newBee = self.chooseBetterSolutionBee(bee,newBee)
         logging.info(0)
-        newBee1,newBee2 =self._crossover(newBee,otherBee)
+        newBee1,newBee2 =self._crossover(copy.deepcopy(newBee),copy.deepcopy(otherBee))
         logging.info("print2")
         return [newBee1,newBee2]
 
@@ -600,15 +612,17 @@ class BeeHive(object):
         :param bee: the bee object with matrix to be mutated
         :return: a bee object with new matrix
         """
-        num_cell = int(self._row * self._col*self._mutatePer)
+        num_cell = int((self._row * self._col-self._numOccupied)*self._mutatePer)
         matrix = bee.matrix
-        for i in range(num_cell):
+        for k in range(num_cell):
             row1,row2,col1,col2=0,0,0,0
             # only iterate to maximum of 10 times, in case of extreme conditions making the program running infinitely
             for i in range(self._random_maximum_times):
                 row1,col1 = self._randomGetCell()
                 row2,col2 = self._randomGetCell()
-                if not (row1==row2 and col1 == col2):
+                if not (row1==row2 and col1 == col2) \
+                        and ((row1,col1) not in self._occupied) \
+                        and ((row2,col2) not in self._occupied):
                     break
             matrix[row1][col1],matrix[row2][col2]=matrix[row2][col2],matrix[row1][col1]
         bee.matrix=matrix
@@ -631,6 +645,8 @@ class BeeHive(object):
             pos_lookup[landType]=i
         for r in range(self._row):
             for c in range(self._col):
+                if (r,c) in self._occupied:
+                    continue
                 type1 = pos_lookup[matrix[r][c]]
                 type2 = pos_lookup[otherMatrix[r][c]]
                 ifChange = RM[type1][type2]
@@ -718,10 +734,33 @@ class BeeHive(object):
             pos_lookUp[type]=[]
         for r in range(self._row):
             for c in range(self._col):
+                if (r,c) in self._occupied:
+                    continue
                 type=matrix[r][c]
                 pos_lookUp[type].append((r,c))
         return pos_lookUp
 
-
+    def normalThreshold(self):
+        if self._occupied == {}:
+            return
+        reduce = {}
+        for pos,value in self._occupied.items():
+            if pos[0]>=self._row or pos[1]>=self._col:
+                continue
+            self._numOccupied+=1
+            if value in reduce:
+                reduce[value]+=1
+            else:
+                reduce[value]=1
+        for name,value in reduce.items():
+            if value not in self._landType_thr:
+                continue
+            thr = self._landType_thr[name]
+            low = thr[0] - value
+            # if low<0:
+            #     low =0
+            high = thr[1] - value
+            assert not (thr[1]>=0 and high<0)
+            self._landType_thr[name]=[low,high]
 
 

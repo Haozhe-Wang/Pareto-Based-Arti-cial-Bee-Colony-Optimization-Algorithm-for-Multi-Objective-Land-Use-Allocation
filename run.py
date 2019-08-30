@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 import math
+from readTIFgraph import Reader
 try:
     import numpy as np
 except:
     raise ImportError("Numpy module not installed.")
 
-from implementation import ABCalgorithm,exhibit
+import ABCalgorithm,exhibit
 
 
 
@@ -47,7 +48,13 @@ def readConstrain():
                         raise ReadConstrainError(msg)
                 elif read_type ==1:
                     try:
-                        value_constrain[name]=[float(low),float(high)]
+                        landType,constrainName = name.split("-")
+                        if landType in value_constrain:
+                            temp = value_constrain[landType]
+                        else:
+                            temp={}
+                        temp[constrainName]=[float(low),float(high)]
+                        value_constrain[landType]=temp
                     except Exception as e:
 
                         msg = "Error Found When Reading Data Constrains: %s\n"%e
@@ -60,6 +67,17 @@ def readConstrain():
 def constraintCheck(matrix):
     #todo add constrain check
     pass
+def readUnchangeArea(path,values):
+
+    reader = Reader(path)
+    graph = reader.getFile()
+    result = {}
+    typeMaps = {11: "森林", 12: '草地', 13: '农田', 14: '聚落', 15: '湿地', 16: '荒漠'}
+    for r,row in enumerate(graph):
+        for c,col in enumerate(row):
+            if col in values:
+                result[(r,c)]=typeMaps[col]
+    return result
 
 
 def run():
@@ -68,15 +86,17 @@ def run():
     ndim = int(2)
     value_constrain,landType_thr= readConstrain()
     print(landType_thr)
-
+    # occupied={(1,2):"湿地",(5,3):"森林",(0,0):"聚落"}
+    occupied = readUnchangeArea('realData\part(1)\LandUseType11.tif',[14])
     model = ABCalgorithm.BeeHive(
-                         10,  10,
-                         value_constrain=value_constrain,
+                         140,  140,2,["森林", "草地", "农田", "聚落", "湿地", "荒漠"],
+                         occupied = occupied    ,
                          landType_thr=landType_thr,
-                         numb_bees =  1000       ,
-                         max_itrs  =  50       ,
+                         numb_bees =  40       ,
+                         max_itrs  =  30       ,
                          verbose=True)
     archive = model.run()
+    model.writeToFile("solutions.txt")
     dataSet=[]
     for bee in archive:
         if len(dataSet)==0:
